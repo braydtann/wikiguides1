@@ -82,6 +82,52 @@ const WikiBrowser = () => {
     setShowCreateModal(true);
   };
 
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    setCreateType('');
+    setEditingItem(null);
+  };
+
+  const handleCreateSuccess = () => {
+    // Refresh the data after successful creation
+    if (selectedCategory) {
+      fetchSubcategories(selectedCategory.id);
+    }
+    if (selectedSubcategory) {
+      fetchArticles({ subcategory_id: selectedSubcategory.id });
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId, categoryName) => {
+    if (window.confirm(`Are you sure you want to delete category "${categoryName}"? This action cannot be undone.`)) {
+      const result = await deleteCategory(categoryId);
+      if (result.success) {
+        setSelectedCategory(null);
+        setSelectedSubcategory(null);
+      }
+    }
+  };
+
+  const handleDeleteSubcategory = async (subcategoryId, subcategoryName) => {
+    if (window.confirm(`Are you sure you want to delete subcategory "${subcategoryName}"? This action cannot be undone.`)) {
+      const result = await deleteSubcategory(subcategoryId);
+      if (result.success) {
+        setSelectedSubcategory(null);
+      }
+    }
+  };
+
+  const handleDeleteArticle = async (articleId, articleTitle) => {
+    if (window.confirm(`Are you sure you want to delete article "${articleTitle}"? This action cannot be undone.`)) {
+      await deleteArticle(articleId);
+    }
+  };
+
+  const handleViewArticle = (article) => {
+    setViewingArticle(article);
+    setShowViewModal(true);
+  };
+
   const getCategoryIcon = (iconName) => {
     // You can expand this with more icons
     const icons = {
