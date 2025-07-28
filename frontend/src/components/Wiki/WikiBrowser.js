@@ -249,7 +249,7 @@ const WikiBrowser = () => {
                     <div key={category.id}>
                       <button
                         onClick={() => handleCategorySelect(category)}
-                        className={`w-full flex items-center p-3 rounded-lg transition-colors ${
+                        className={`w-full flex items-center p-3 rounded-lg transition-colors group ${
                           isSelected 
                             ? 'bg-primary-50 border-primary-200 border text-primary-700' 
                             : 'hover:bg-secondary-50 border border-transparent'
