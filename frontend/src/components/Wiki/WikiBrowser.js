@@ -500,6 +500,76 @@ const WikiBrowser = () => {
           )}
         </div>
       </div>
+
+      {/* Create Category Modal */}
+      <CreateCategoryModal
+        isOpen={showCreateModal && createType === 'category'}
+        onClose={closeCreateModal}
+        onSuccess={handleCreateSuccess}
+        editingData={editingItem?.type === 'category' ? editingItem.data : null}
+      />
+
+      {/* Create Subcategory Modal */}
+      <CreateSubcategoryModal
+        isOpen={showCreateModal && createType === 'subcategory'}
+        onClose={closeCreateModal}
+        onSuccess={handleCreateSuccess}
+        categoryId={selectedCategory?.id}
+        editingData={editingItem?.type === 'subcategory' ? editingItem.data : null}
+      />
+
+      {/* Create Article Modal */}
+      <CreateArticleModal
+        isOpen={showCreateModal && createType === 'article'}
+        onClose={closeCreateModal}
+        onSuccess={handleCreateSuccess}
+        subcategoryId={selectedSubcategory?.id}
+        editingData={editingItem?.type === 'article' ? editingItem.data : null}
+      />
+
+      {/* Article View Modal */}
+      {showViewModal && viewingArticle && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl mx-4 my-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-secondary-200 sticky top-0 bg-white">
+              <div>
+                <h3 className="text-xl font-semibold text-secondary-900">{viewingArticle.title}</h3>
+                <p className="text-sm text-secondary-500 mt-1">
+                  Version {viewingArticle.version} • {viewingArticle.visibility} • 
+                  Last updated {new Date(viewingArticle.updated_at).toLocaleDateString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="text-secondary-400 hover:text-secondary-600"
+              >
+                <Eye className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div 
+                className="prose max-w-none"
+                dangerouslySetInnerHTML={{ __html: viewingArticle.content }}
+              />
+              {viewingArticle.tags && viewingArticle.tags.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-secondary-200">
+                  <div className="flex flex-wrap gap-2">
+                    {viewingArticle.tags.map((tag, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-3 py-1 text-sm bg-primary-100 text-primary-700 rounded-full"
+                      >
+                        <Tag className="h-3 w-3 mr-1" />
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
