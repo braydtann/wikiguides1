@@ -46,8 +46,8 @@ const AppContent = () => {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/wiki" element={<WikiBrowser />} />
-                <Route path="/wiki/*" element={<WikiBrowser />} />
+                <Route path="/wiki" element={<EnhancedWikiBrowser />} />
+                <Route path="/wiki/*" element={<EnhancedWikiBrowser />} />
                 <Route path="/flows" element={<FlowBrowser />} />
                 <Route path="/flows/:flowId/execute" element={<FlowExecutor />} />
                 <Route path="/flows/:flowId/execute/:sessionId" element={<FlowExecutor />} />
