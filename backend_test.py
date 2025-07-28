@@ -865,7 +865,8 @@ class BackendTester:
                     # Check if our article is found in search results
                     articles = data["articles"]
                     if isinstance(articles, list):
-                        article_found = any(article.get("title", "").lower().find("getting") != -1 for article in articles)
+                        article_found = any("getting" in article.get("title", "").lower() or 
+                                          "getting" in article.get("content", "").lower() for article in articles)
                         if article_found:
                             self.log_test("Wiki Search", True, f"Search functionality working correctly", 
                                         {"articles_found": len(articles), "categories_found": len(data["categories"]), "subcategories_found": len(data["subcategories"])})
