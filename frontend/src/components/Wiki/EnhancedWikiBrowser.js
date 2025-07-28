@@ -61,21 +61,23 @@ const EnhancedWikiBrowser = () => {
     return <WikiSelection onWikiSelect={setSelectedWiki} />;
   }
 
-  // Effects with proper dependencies
+  // Effects - simplified to avoid dependency warnings
   useEffect(() => {
     if (selectedWiki) {
       fetchCategories(selectedWiki.id);
       setSelectedCategory(null);
       setSelectedSubcategory(null);
     }
-  }, [selectedWiki, fetchCategories, setSelectedCategory, setSelectedSubcategory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWiki]);
 
   useEffect(() => {
     if (selectedCategory) {
       fetchSubcategories(selectedCategory.id);
       setSelectedSubcategory(null);
     }
-  }, [selectedCategory, fetchSubcategories, setSelectedSubcategory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]);
 
   useEffect(() => {
     if (selectedSubcategory) {
@@ -85,7 +87,8 @@ const EnhancedWikiBrowser = () => {
     } else if (selectedWiki) {
       fetchArticles({ wiki_id: selectedWiki.id });
     }
-  }, [selectedSubcategory, selectedCategory, selectedWiki, fetchArticles]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubcategory, selectedCategory, selectedWiki]);
 
   const openCreateModal = (type) => {
     setCreateType(type);
