@@ -56,27 +56,20 @@ const EnhancedWikiBrowser = () => {
   const [viewingArticle, setViewingArticle] = useState(null);
   const [filterBy, setFilterBy] = useState('all'); // all, recent, popular
 
-  // If no wiki is selected, show wiki selection
-  if (!selectedWiki) {
-    return <WikiSelection onWikiSelect={setSelectedWiki} />;
-  }
-
-  // Effects - simplified to avoid dependency warnings
+  // Effects - moved outside of conditional render
   useEffect(() => {
     if (selectedWiki) {
       fetchCategories(selectedWiki.id);
       setSelectedCategory(null);
       setSelectedSubcategory(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedWiki]);
+  }, [selectedWiki]); // Simplified dependencies
 
   useEffect(() => {
     if (selectedCategory) {
       fetchSubcategories(selectedCategory.id);
       setSelectedSubcategory(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory]);
 
   useEffect(() => {
@@ -87,8 +80,12 @@ const EnhancedWikiBrowser = () => {
     } else if (selectedWiki) {
       fetchArticles({ wiki_id: selectedWiki.id });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubcategory, selectedCategory, selectedWiki]);
+
+  // If no wiki is selected, show wiki selection
+  if (!selectedWiki) {
+    return <WikiSelection onWikiSelect={setSelectedWiki} />;
+  }
 
   const openCreateModal = (type) => {
     setCreateType(type);
