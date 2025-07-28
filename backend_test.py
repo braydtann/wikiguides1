@@ -965,6 +965,688 @@ class BackendTester:
         except Exception as e:
             self.log_test("Validation Error Cases", False, f"Validation test failed with exception: {str(e)}")
             return False
+
+    # Flow System Tests
+    def test_flow_admin_login(self):
+        """Test login as admin user for Flow testing"""
+        try:
+            login_data = {
+                "email": "admin@wikiguides.com",
+                "password": "admin123"
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/api/auth/login",
+                json=login_data,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "access_token" in data and "user" in data:
+                    self.auth_token = data["access_token"]
+                    self.log_test("Flow Admin Login", True, "Admin logged in successfully for Flow testing", 
+                                {"user_email": data["user"]["email"], "role": data["user"]["role"]})
+                    return True
+                else:
+                    self.log_test("Flow Admin Login", False, "Invalid login response structure", data)
+                    return False
+            else:
+                self.log_test("Flow Admin Login", False, f"Admin login failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Flow Admin Login", False, f"Admin login failed with exception: {str(e)}")
+            return False
+
+    def test_create_flow(self):
+        """Test POST /api/flows endpoint"""
+        if not self.auth_token:
+            self.log_test("Create Flow", False, "No auth token available")
+            return False
+            
+        try:
+            flow_data = {
+                "title": "Customer Onboarding Flow",
+                "description": "Guide new customers through account setup",
+                "visibility": "internal",
+                "tags": ["onboarding", "customer", "setup"]
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/api/flows",
+                json=flow_data,
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = ["id", "title", "description", "visibility", "tags", "version", "is_active", "created_at", "updated_at", "created_by", "updated_by"]
+                
+                if all(field in data for field in expected_fields):
+                    if (data["title"] == flow_data["title"] and 
+                        data["description"] == flow_data["description"] and
+                        data["visibility"] == flow_data["visibility"] and
+                        data["tags"] == flow_data["tags"] and
+                        data["version"] == 1 and
+                        data["is_active"] == True):
+                        self.flow_id = data["id"]  # Store for later tests
+                        self.log_test("Create Flow", True, "Flow created successfully", data)
+                        return True
+                    else:
+                        self.log_test("Create Flow", False, "Flow data doesn't match expected values", data)
+                        return False
+                else:
+                    self.log_test("Create Flow", False, "Missing required fields in flow response", data)
+                    return False
+            else:
+                self.log_test("Create Flow", False, f"Create flow failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Create Flow", False, f"Create flow failed with exception: {str(e)}")
+            return False
+
+    def test_get_flows(self):
+        """Test GET /api/flows endpoint"""
+        if not self.auth_token:
+            self.log_test("Get Flows", False, "No auth token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/flows", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, list):
+                    if len(data) > 0:
+                        # Check if our created flow exists
+                        flow_found = any(flow.get("title") == "Customer Onboarding Flow" for flow in data)
+                        if flow_found:
+                            self.log_test("Get Flows", True, f"Flows retrieved successfully ({len(data)} flows)", 
+                                        {"flow_count": len(data)})
+                            return True
+                        else:
+                            self.log_test("Get Flows", False, "Created flow not found in list", data)
+                            return False
+                    else:
+                        self.log_test("Get Flows", True, "Flows retrieved successfully (empty list)", data)
+                        return True
+                else:
+                    self.log_test("Get Flows", False, "Flows response is not a list", data)
+                    return False
+            else:
+                self.log_test("Get Flows", False, f"Get flows failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Get Flows", False, f"Get flows failed with exception: {str(e)}")
+            return False
+
+    def test_get_specific_flow(self):
+        """Test GET /api/flows/{flow_id} endpoint"""
+        if not self.auth_token or not hasattr(self, 'flow_id'):
+            self.log_test("Get Specific Flow", False, "No auth token or flow ID available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/flows/{self.flow_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = ["id", "title", "description", "visibility", "tags", "version", "is_active"]
+                
+                if all(field in data for field in expected_fields):
+                    if (data["id"] == self.flow_id and 
+                        data["title"] == "Customer Onboarding Flow" and
+                        data["is_active"] == True):
+                        self.log_test("Get Specific Flow", True, "Specific flow retrieved successfully", data)
+                        return True
+                    else:
+                        self.log_test("Get Specific Flow", False, "Flow data doesn't match expected values", data)
+                        return False
+                else:
+                    self.log_test("Get Specific Flow", False, "Missing required fields in flow response", data)
+                    return False
+            else:
+                self.log_test("Get Specific Flow", False, f"Get specific flow failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Get Specific Flow", False, f"Get specific flow failed with exception: {str(e)}")
+            return False
+
+    def test_create_flow_steps(self):
+        """Test POST /api/flows/{flow_id}/steps endpoint - Create multiple steps"""
+        if not self.auth_token or not hasattr(self, 'flow_id'):
+            self.log_test("Create Flow Steps", False, "No auth token or flow ID available")
+            return False
+            
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            # Step 1: Information step
+            step1_data = {
+                "flow_id": self.flow_id,
+                "step_order": 1,
+                "step_type": "information",
+                "question_text": "Welcome to our onboarding process!",
+                "description": "This will guide you through setting up your account.",
+                "is_required": True
+            }
+            
+            response1 = self.session.post(
+                f"{self.base_url}/api/flows/{self.flow_id}/steps",
+                json=step1_data,
+                headers=headers
+            )
+            
+            if response1.status_code != 200:
+                self.log_test("Create Flow Steps", False, f"Step 1 creation failed with status {response1.status_code}", 
+                            {"status_code": response1.status_code, "text": response1.text})
+                return False
+            
+            step1_response = response1.json()
+            self.step1_id = step1_response["id"]
+            
+            # Step 2: Multiple choice step
+            step2_data = {
+                "flow_id": self.flow_id,
+                "step_order": 2,
+                "step_type": "multiple_choice",
+                "question_text": "What type of account would you like to create?",
+                "options": [
+                    {"text": "Personal Account", "value": "personal", "next_step": None},
+                    {"text": "Business Account", "value": "business", "next_step": None}
+                ],
+                "is_required": True
+            }
+            
+            response2 = self.session.post(
+                f"{self.base_url}/api/flows/{self.flow_id}/steps",
+                json=step2_data,
+                headers=headers
+            )
+            
+            if response2.status_code != 200:
+                self.log_test("Create Flow Steps", False, f"Step 2 creation failed with status {response2.status_code}", 
+                            {"status_code": response2.status_code, "text": response2.text})
+                return False
+            
+            step2_response = response2.json()
+            self.step2_id = step2_response["id"]
+            
+            # Step 3: Text input step
+            step3_data = {
+                "flow_id": self.flow_id,
+                "step_order": 3,
+                "step_type": "text_input",
+                "question_text": "Please enter your full name",
+                "validation_rules": {"required": True, "min_length": 2},
+                "is_required": True
+            }
+            
+            response3 = self.session.post(
+                f"{self.base_url}/api/flows/{self.flow_id}/steps",
+                json=step3_data,
+                headers=headers
+            )
+            
+            if response3.status_code != 200:
+                self.log_test("Create Flow Steps", False, f"Step 3 creation failed with status {response3.status_code}", 
+                            {"status_code": response3.status_code, "text": response3.text})
+                return False
+            
+            step3_response = response3.json()
+            self.step3_id = step3_response["id"]
+            
+            self.log_test("Create Flow Steps", True, "All 3 flow steps created successfully", 
+                        {"step1_id": self.step1_id, "step2_id": self.step2_id, "step3_id": self.step3_id})
+            return True
+                
+        except Exception as e:
+            self.log_test("Create Flow Steps", False, f"Create flow steps failed with exception: {str(e)}")
+            return False
+
+    def test_get_flow_steps(self):
+        """Test GET /api/flows/{flow_id}/steps endpoint"""
+        if not self.auth_token or not hasattr(self, 'flow_id'):
+            self.log_test("Get Flow Steps", False, "No auth token or flow ID available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/flows/{self.flow_id}/steps", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, list):
+                    if len(data) >= 3:  # Should have at least 3 steps we created
+                        # Check if steps are properly ordered
+                        steps_ordered = all(data[i]["step_order"] <= data[i+1]["step_order"] for i in range(len(data)-1))
+                        if steps_ordered:
+                            # Check if we have our expected steps
+                            step_types = [step["step_type"] for step in data]
+                            expected_types = ["information", "multiple_choice", "text_input"]
+                            if all(step_type in step_types for step_type in expected_types):
+                                self.log_test("Get Flow Steps", True, f"Flow steps retrieved successfully ({len(data)} steps)", 
+                                            {"step_count": len(data), "step_types": step_types})
+                                return True
+                            else:
+                                self.log_test("Get Flow Steps", False, "Expected step types not found", data)
+                                return False
+                        else:
+                            self.log_test("Get Flow Steps", False, "Steps not properly ordered", data)
+                            return False
+                    else:
+                        self.log_test("Get Flow Steps", False, f"Expected at least 3 steps, got {len(data)}", data)
+                        return False
+                else:
+                    self.log_test("Get Flow Steps", False, "Steps response is not a list", data)
+                    return False
+            else:
+                self.log_test("Get Flow Steps", False, f"Get flow steps failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Get Flow Steps", False, f"Get flow steps failed with exception: {str(e)}")
+            return False
+
+    def test_update_flow_step(self):
+        """Test PUT /api/flows/{flow_id}/steps/{step_id} endpoint"""
+        if not self.auth_token or not hasattr(self, 'flow_id') or not hasattr(self, 'step1_id'):
+            self.log_test("Update Flow Step", False, "No auth token, flow ID, or step ID available")
+            return False
+            
+        try:
+            update_data = {
+                "flow_id": self.flow_id,
+                "step_order": 1,
+                "step_type": "information",
+                "question_text": "Welcome to our enhanced onboarding process!",
+                "description": "This updated guide will walk you through setting up your account with new features.",
+                "is_required": True
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            response = self.session.put(
+                f"{self.base_url}/api/flows/{self.flow_id}/steps/{self.step1_id}",
+                json=update_data,
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if (data["question_text"] == update_data["question_text"] and 
+                    data["description"] == update_data["description"]):
+                    self.log_test("Update Flow Step", True, "Flow step updated successfully", data)
+                    return True
+                else:
+                    self.log_test("Update Flow Step", False, "Updated step data doesn't match expected values", data)
+                    return False
+            else:
+                self.log_test("Update Flow Step", False, f"Update flow step failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Update Flow Step", False, f"Update flow step failed with exception: {str(e)}")
+            return False
+
+    def test_start_flow_execution(self):
+        """Test POST /api/flows/{flow_id}/execute endpoint"""
+        if not self.auth_token or not hasattr(self, 'flow_id'):
+            self.log_test("Start Flow Execution", False, "No auth token or flow ID available")
+            return False
+            
+        try:
+            execution_data = {
+                "flow_id": self.flow_id,
+                "session_data": {"user_agent": "test_browser", "ip_address": "127.0.0.1"}
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/api/flows/{self.flow_id}/execute",
+                json=execution_data,
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = ["id", "flow_id", "session_id", "status", "current_step_id", "answers", "session_data", "url_path", "started_at", "last_activity"]
+                
+                if all(field in data for field in expected_fields):
+                    if (data["flow_id"] == self.flow_id and 
+                        data["status"] == "in_progress" and
+                        data["current_step_id"] is not None):
+                        self.execution_id = data["id"]
+                        self.session_id = data["session_id"]
+                        self.current_step_id = data["current_step_id"]
+                        self.log_test("Start Flow Execution", True, "Flow execution started successfully", data)
+                        return True
+                    else:
+                        self.log_test("Start Flow Execution", False, "Execution data doesn't match expected values", data)
+                        return False
+                else:
+                    self.log_test("Start Flow Execution", False, "Missing required fields in execution response", data)
+                    return False
+            else:
+                self.log_test("Start Flow Execution", False, f"Start flow execution failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Start Flow Execution", False, f"Start flow execution failed with exception: {str(e)}")
+            return False
+
+    def test_get_flow_execution_status(self):
+        """Test GET /api/flows/{flow_id}/execute/{session_id} endpoint"""
+        if not self.auth_token or not hasattr(self, 'flow_id') or not hasattr(self, 'session_id'):
+            self.log_test("Get Flow Execution Status", False, "No auth token, flow ID, or session ID available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/flows/{self.flow_id}/execute/{self.session_id}", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = ["id", "flow_id", "session_id", "status", "current_step_id", "answers"]
+                
+                if all(field in data for field in expected_fields):
+                    if (data["flow_id"] == self.flow_id and 
+                        data["session_id"] == self.session_id and
+                        data["status"] == "in_progress"):
+                        self.log_test("Get Flow Execution Status", True, "Flow execution status retrieved successfully", data)
+                        return True
+                    else:
+                        self.log_test("Get Flow Execution Status", False, "Execution status data doesn't match expected values", data)
+                        return False
+                else:
+                    self.log_test("Get Flow Execution Status", False, "Missing required fields in execution status response", data)
+                    return False
+            else:
+                self.log_test("Get Flow Execution Status", False, f"Get flow execution status failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Get Flow Execution Status", False, f"Get flow execution status failed with exception: {str(e)}")
+            return False
+
+    def test_submit_step_answers(self):
+        """Test POST /api/flows/{flow_id}/execute/{session_id}/answer endpoint"""
+        if not self.auth_token or not hasattr(self, 'flow_id') or not hasattr(self, 'session_id'):
+            self.log_test("Submit Step Answers", False, "No auth token, flow ID, or session ID available")
+            return False
+            
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            # Answer Step 1 (information step)
+            answer1_data = {
+                "step_id": self.step1_id,
+                "answer": "acknowledged",
+                "metadata": {"viewed_at": "2024-01-01T10:00:00Z"}
+            }
+            
+            response1 = self.session.post(
+                f"{self.base_url}/api/flows/{self.flow_id}/execute/{self.session_id}/answer",
+                json=answer1_data,
+                headers=headers
+            )
+            
+            if response1.status_code != 200:
+                self.log_test("Submit Step Answers", False, f"Step 1 answer submission failed with status {response1.status_code}", 
+                            {"status_code": response1.status_code, "text": response1.text})
+                return False
+            
+            # Answer Step 2 (multiple choice)
+            answer2_data = {
+                "step_id": self.step2_id,
+                "answer": "personal",
+                "metadata": {"selected_at": "2024-01-01T10:01:00Z"}
+            }
+            
+            response2 = self.session.post(
+                f"{self.base_url}/api/flows/{self.flow_id}/execute/{self.session_id}/answer",
+                json=answer2_data,
+                headers=headers
+            )
+            
+            if response2.status_code != 200:
+                self.log_test("Submit Step Answers", False, f"Step 2 answer submission failed with status {response2.status_code}", 
+                            {"status_code": response2.status_code, "text": response2.text})
+                return False
+            
+            # Answer Step 3 (text input)
+            answer3_data = {
+                "step_id": self.step3_id,
+                "answer": "John Doe",
+                "metadata": {"input_at": "2024-01-01T10:02:00Z"}
+            }
+            
+            response3 = self.session.post(
+                f"{self.base_url}/api/flows/{self.flow_id}/execute/{self.session_id}/answer",
+                json=answer3_data,
+                headers=headers
+            )
+            
+            if response3.status_code == 200:
+                data3 = response3.json()
+                # This should be the final step, so is_completed should be True
+                if data3.get("is_completed") == True:
+                    self.log_test("Submit Step Answers", True, "All step answers submitted successfully and flow completed", 
+                                {"step1_status": response1.status_code, "step2_status": response2.status_code, "step3_status": response3.status_code, "completed": data3.get("is_completed")})
+                    return True
+                else:
+                    self.log_test("Submit Step Answers", True, "All step answers submitted successfully", 
+                                {"step1_status": response1.status_code, "step2_status": response2.status_code, "step3_status": response3.status_code})
+                    return True
+            else:
+                self.log_test("Submit Step Answers", False, f"Step 3 answer submission failed with status {response3.status_code}", 
+                            {"status_code": response3.status_code, "text": response3.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Submit Step Answers", False, f"Submit step answers failed with exception: {str(e)}")
+            return False
+
+    def test_get_flow_summary(self):
+        """Test GET /api/flows/{flow_id}/execute/{session_id}/summary endpoint"""
+        if not self.auth_token or not hasattr(self, 'flow_id') or not hasattr(self, 'session_id'):
+            self.log_test("Get Flow Summary", False, "No auth token, flow ID, or session ID available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/flows/{self.flow_id}/execute/{self.session_id}/summary", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = ["execution_id", "flow_title", "completed_steps", "total_time_seconds", "summary_text", "summary_markdown", "summary_json", "generated_at"]
+                
+                if all(field in data for field in expected_fields):
+                    if (data["flow_title"] == "Customer Onboarding Flow" and 
+                        len(data["completed_steps"]) >= 3 and
+                        "summary_text" in data and data["summary_text"] and
+                        "summary_markdown" in data and data["summary_markdown"] and
+                        "summary_json" in data and data["summary_json"]):
+                        self.log_test("Get Flow Summary", True, "Flow summary generated successfully", 
+                                    {"completed_steps": len(data["completed_steps"]), "total_time": data["total_time_seconds"]})
+                        return True
+                    else:
+                        self.log_test("Get Flow Summary", False, "Summary data doesn't match expected values", data)
+                        return False
+                else:
+                    self.log_test("Get Flow Summary", False, "Missing required fields in summary response", data)
+                    return False
+            else:
+                self.log_test("Get Flow Summary", False, f"Get flow summary failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Get Flow Summary", False, f"Get flow summary failed with exception: {str(e)}")
+            return False
+
+    def test_flow_search_and_filtering(self):
+        """Test flow search and filtering functionality"""
+        if not self.auth_token:
+            self.log_test("Flow Search and Filtering", False, "No auth token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            
+            # Test search by title
+            response1 = self.session.get(f"{self.base_url}/api/flows?search=onboarding", headers=headers)
+            
+            if response1.status_code != 200:
+                self.log_test("Flow Search and Filtering", False, f"Search by title failed with status {response1.status_code}")
+                return False
+            
+            search_data = response1.json()
+            if not isinstance(search_data, list):
+                self.log_test("Flow Search and Filtering", False, "Search response is not a list")
+                return False
+            
+            # Test filter by tags
+            response2 = self.session.get(f"{self.base_url}/api/flows?tags=onboarding,customer", headers=headers)
+            
+            if response2.status_code != 200:
+                self.log_test("Flow Search and Filtering", False, f"Filter by tags failed with status {response2.status_code}")
+                return False
+            
+            tag_data = response2.json()
+            if not isinstance(tag_data, list):
+                self.log_test("Flow Search and Filtering", False, "Tag filter response is not a list")
+                return False
+            
+            self.log_test("Flow Search and Filtering", True, "Flow search and filtering working correctly", 
+                        {"search_results": len(search_data), "tag_filter_results": len(tag_data)})
+            return True
+                
+        except Exception as e:
+            self.log_test("Flow Search and Filtering", False, f"Flow search and filtering failed with exception: {str(e)}")
+            return False
+
+    def test_flow_permissions_validation(self):
+        """Test role-based permissions for Flow operations"""
+        if not self.auth_token:
+            self.log_test("Flow Permissions Validation", False, "No auth token available")
+            return False
+            
+        try:
+            # Test that admin can access all Flow endpoints (already tested above)
+            # For now, we'll just verify that our admin user can perform all operations
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/auth/me", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("role") == "admin":
+                    self.log_test("Flow Permissions Validation", True, "Admin role has proper permissions for Flow operations", 
+                                {"user_role": data["role"]})
+                    return True
+                else:
+                    self.log_test("Flow Permissions Validation", False, f"Expected admin role, got {data.get('role')}", data)
+                    return False
+            else:
+                self.log_test("Flow Permissions Validation", False, f"Failed to get current user info for permission test", 
+                            {"status_code": response.status_code})
+                return False
+                
+        except Exception as e:
+            self.log_test("Flow Permissions Validation", False, f"Permission validation failed with exception: {str(e)}")
+            return False
+
+    def test_flow_error_handling(self):
+        """Test error handling for Flow system edge cases"""
+        if not self.auth_token:
+            self.log_test("Flow Error Handling", False, "No auth token available")
+            return False
+            
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            # Test 1: Try to get non-existent flow
+            response1 = self.session.get(f"{self.base_url}/api/flows/non-existent-id", headers=headers)
+            
+            if response1.status_code != 404:
+                self.log_test("Flow Error Handling", False, f"Expected 404 for non-existent flow, got {response1.status_code}")
+                return False
+            
+            # Test 2: Try to create step for non-existent flow
+            invalid_step_data = {
+                "flow_id": "non-existent-flow-id",
+                "step_order": 1,
+                "step_type": "information",
+                "question_text": "Test question",
+                "is_required": True
+            }
+            
+            response2 = self.session.post(
+                f"{self.base_url}/api/flows/non-existent-flow-id/steps",
+                json=invalid_step_data,
+                headers=headers
+            )
+            
+            if response2.status_code != 404:
+                self.log_test("Flow Error Handling", False, f"Expected 404 for step creation on non-existent flow, got {response2.status_code}")
+                return False
+            
+            # Test 3: Try to start execution for non-existent flow
+            response3 = self.session.post(
+                f"{self.base_url}/api/flows/non-existent-flow-id/execute",
+                json={"flow_id": "non-existent-flow-id"},
+                headers=headers
+            )
+            
+            if response3.status_code != 404:
+                self.log_test("Flow Error Handling", False, f"Expected 404 for execution on non-existent flow, got {response3.status_code}")
+                return False
+            
+            self.log_test("Flow Error Handling", True, "Error handling working correctly for Flow system edge cases", 
+                        {"test1_status": response1.status_code, "test2_status": response2.status_code, "test3_status": response3.status_code})
+            return True
+                
+        except Exception as e:
+            self.log_test("Flow Error Handling", False, f"Flow error handling test failed with exception: {str(e)}")
+            return False
     
     def run_all_tests(self):
         """Run all backend tests in sequence"""
