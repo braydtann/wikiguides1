@@ -122,21 +122,21 @@ Build a Wiki + Guided Flow Editor application with Omni Channel Platform (OCP) r
 - ✅ Unauthorized access blocked
 - ✅ JWT token validation working
 
-## Next Steps (Phase 3: Guided Flow System)
+## Next Steps (Phase 4: Frontend Integration & Advanced Features)
 
-### Phase 3: Guided Flow System Implementation
-1. Flow builder data models (step types, conditions, branching)
-2. Visual flow editor with drag-and-drop interface
-3. Flow execution engine with session management
-4. URL tracking and resumable sessions
-5. Flow summary and CRM note generation
+### Phase 4: Frontend Integration
+1. Flow builder visual interface with drag-and-drop
+2. Flow execution interface for end users
+3. Flow summary display and CRM integration
+4. Admin dashboard for flow management
+5. Dual portal access (public/employee)
 
-### Phase 4: Advanced Features
+### Phase 5: Advanced Features
 1. Google Drive integration for file storage
-2. Admin dashboard enhancements
-3. Analytics and reporting
-4. Dual portal access (public/employee)
-5. Rich-text editor improvements
+2. Analytics and reporting
+3. Rich-text editor improvements
+4. Advanced conditional logic and branching
+5. Flow templates and sharing
 
 ## Demo Data Created
 
