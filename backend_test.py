@@ -1684,7 +1684,25 @@ class BackendTester:
             ("Validation Error Cases", self.test_validation_error_cases)
         ]
         
-        all_tests = basic_tests + wiki_tests
+        # Flow System Tests
+        flow_tests = [
+            ("Flow Admin Login", self.test_flow_admin_login),
+            ("Create Flow", self.test_create_flow),
+            ("Get Flows", self.test_get_flows),
+            ("Get Specific Flow", self.test_get_specific_flow),
+            ("Create Flow Steps", self.test_create_flow_steps),
+            ("Get Flow Steps", self.test_get_flow_steps),
+            ("Update Flow Step", self.test_update_flow_step),
+            ("Start Flow Execution", self.test_start_flow_execution),
+            ("Get Flow Execution Status", self.test_get_flow_execution_status),
+            ("Submit Step Answers", self.test_submit_step_answers),
+            ("Get Flow Summary", self.test_get_flow_summary),
+            ("Flow Search and Filtering", self.test_flow_search_and_filtering),
+            ("Flow Permissions Validation", self.test_flow_permissions_validation),
+            ("Flow Error Handling", self.test_flow_error_handling)
+        ]
+        
+        all_tests = basic_tests + wiki_tests + flow_tests
         passed = 0
         total = len(all_tests)
         
@@ -1702,6 +1720,16 @@ class BackendTester:
         print("-" * 40)
         
         for test_name, test_func in wiki_tests:
+            try:
+                if test_func():
+                    passed += 1
+            except Exception as e:
+                self.log_test(test_name, False, f"Test failed with unexpected error: {str(e)}")
+        
+        print(f"\n🔄 Running {len(flow_tests)} Flow System Tests...")
+        print("-" * 40)
+        
+        for test_name, test_func in flow_tests:
             try:
                 if test_func():
                     passed += 1
