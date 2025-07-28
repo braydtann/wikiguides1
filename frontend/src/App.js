@@ -12,7 +12,7 @@ import LoadingSpinner from './components/Common/LoadingSpinner';
 
 // Main App component that handles routing and authentication
 const AppContent = () => {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { loading, isAuthenticated } = useAuth();
   const [showRegister, setShowRegister] = useState(false);
 
   if (loading) {
