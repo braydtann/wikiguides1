@@ -970,7 +970,8 @@ class BackendTester:
         print(f"🚀 Starting Backend API Tests for {self.base_url}")
         print("=" * 60)
         
-        tests = [
+        # Basic OCP Foundation Tests
+        basic_tests = [
             ("Health Check", self.test_health_check),
             ("User Registration", self.test_user_registration),
             ("User Login", self.test_user_login),
@@ -980,10 +981,44 @@ class BackendTester:
             ("MongoDB Integration", self.test_mongodb_integration)
         ]
         
-        passed = 0
-        total = len(tests)
+        # Wiki System Tests
+        wiki_tests = [
+            ("Wiki Admin Login", self.test_wiki_admin_login),
+            ("Create Wiki Category", self.test_create_wiki_category),
+            ("Get Wiki Categories", self.test_get_wiki_categories),
+            ("Create Troubleshooting Category", self.test_create_troubleshooting_category),
+            ("Create Wiki Subcategory", self.test_create_wiki_subcategory),
+            ("Create Account Setup Subcategory", self.test_create_account_setup_subcategory),
+            ("Get Wiki Subcategories", self.test_get_wiki_subcategories),
+            ("Get Subcategories with Filter", self.test_get_subcategories_with_filter),
+            ("Create Wiki Article", self.test_create_wiki_article),
+            ("Get Wiki Articles", self.test_get_wiki_articles),
+            ("Get Specific Wiki Article", self.test_get_specific_wiki_article),
+            ("Update Wiki Article", self.test_update_wiki_article),
+            ("Get Article Versions", self.test_get_article_versions),
+            ("Wiki Search", self.test_wiki_search),
+            ("Role-Based Permissions", self.test_role_based_permissions),
+            ("Validation Error Cases", self.test_validation_error_cases)
+        ]
         
-        for test_name, test_func in tests:
+        all_tests = basic_tests + wiki_tests
+        passed = 0
+        total = len(all_tests)
+        
+        print(f"\n📋 Running {len(basic_tests)} Basic OCP Foundation Tests...")
+        print("-" * 40)
+        
+        for test_name, test_func in basic_tests:
+            try:
+                if test_func():
+                    passed += 1
+            except Exception as e:
+                self.log_test(test_name, False, f"Test failed with unexpected error: {str(e)}")
+        
+        print(f"\n📚 Running {len(wiki_tests)} Wiki System Tests...")
+        print("-" * 40)
+        
+        for test_name, test_func in wiki_tests:
             try:
                 if test_func():
                     passed += 1
