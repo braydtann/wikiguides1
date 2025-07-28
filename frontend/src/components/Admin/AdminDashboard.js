@@ -481,7 +481,10 @@ const AdminDashboard = () => {
                     <p className="text-blue-700 text-sm mb-3">
                       Configure Google Drive for file storage. You'll need to set up OAuth credentials.
                     </p>
-                    <button className="btn-primary text-sm">
+                    <button 
+                      onClick={handleConfigureGoogleDrive}
+                      className="btn-primary text-sm"
+                    >
                       Configure Google Drive
                     </button>
                   </div>
