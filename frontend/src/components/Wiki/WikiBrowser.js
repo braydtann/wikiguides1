@@ -506,7 +506,6 @@ const WikiBrowser = () => {
         isOpen={showCreateModal && createType === 'category'}
         onClose={closeCreateModal}
         onSuccess={handleCreateSuccess}
-        editingData={editingItem?.type === 'category' ? editingItem.data : null}
       />
 
       {/* Create Subcategory Modal */}
@@ -515,7 +514,6 @@ const WikiBrowser = () => {
         onClose={closeCreateModal}
         onSuccess={handleCreateSuccess}
         categoryId={selectedCategory?.id}
-        editingData={editingItem?.type === 'subcategory' ? editingItem.data : null}
       />
 
       {/* Create Article Modal */}
@@ -524,7 +522,6 @@ const WikiBrowser = () => {
         onClose={closeCreateModal}
         onSuccess={handleCreateSuccess}
         subcategoryId={selectedSubcategory?.id}
-        editingData={editingItem?.type === 'article' ? editingItem.data : null}
       />
 
       {/* Article View Modal */}
