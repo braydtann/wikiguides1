@@ -532,9 +532,9 @@ const AdminDashboard = () => {
                   </div>
                   <input 
                     type="checkbox" 
-                    checked={systemSettings?.backup_enabled || false}
+                    checked={editingSettings?.backup_enabled || false}
+                    onChange={(e) => handleSettingsChange('backup_enabled', e.target.checked)}
                     className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-secondary-300 rounded"
-                    onChange={(e) => {/* Handle change */}}
                   />
                 </div>
               </div>
