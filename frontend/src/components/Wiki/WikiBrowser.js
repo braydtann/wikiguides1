@@ -461,16 +461,32 @@ const WikiBrowser = () => {
                   <div className="flex items-center justify-between text-sm text-secondary-500">
                     <span>Version {article.version}</span>
                     <div className="flex items-center space-x-2">
-                      <button className="p-1 hover:bg-secondary-100 rounded">
+                      <button 
+                        onClick={() => handleViewArticle(article)}
+                        className="p-1 hover:bg-secondary-100 rounded"
+                        title="View Article"
+                      >
                         <Eye className="h-4 w-4" />
                       </button>
                       {hasPermission('wiki:write') && (
                         <>
-                          <button className="p-1 hover:bg-secondary-100 rounded">
+                          <button 
+                            onClick={() => {
+                              setEditingItem({ type: 'article', data: article });
+                              setCreateType('article');
+                              setShowCreateModal(true);
+                            }}
+                            className="p-1 hover:bg-secondary-100 rounded"
+                            title="Edit Article"
+                          >
                             <Edit className="h-4 w-4" />
                           </button>
                           {hasPermission('wiki:delete') && (
-                            <button className="p-1 hover:bg-red-100 rounded text-red-600">
+                            <button 
+                              onClick={() => handleDeleteArticle(article.id, article.title)}
+                              className="p-1 hover:bg-red-100 rounded text-red-600"
+                              title="Delete Article"
+                            >
                               <Trash2 className="h-4 w-4" />
                             </button>
                           )}
