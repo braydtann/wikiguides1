@@ -47,6 +47,11 @@ const FlowBrowser = () => {
     }
   };
 
+  const handleCreateSuccess = () => {
+    // Refresh flows after successful creation
+    fetchFlows();
+  };
+
   const getStepTypeIcon = (stepType) => {
     const icons = {
       'multiple_choice': '🔘',
