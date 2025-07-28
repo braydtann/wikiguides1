@@ -311,13 +311,41 @@ const WikiBrowser = () => {
                               <button
                                 key={subcategory.id}
                                 onClick={() => handleSubcategorySelect(subcategory)}
-                                className={`w-full text-left p-2 rounded text-sm transition-colors ${
+                                className={`w-full text-left p-2 rounded text-sm transition-colors group flex items-center justify-between ${
                                   selectedSubcategory?.id === subcategory.id
                                     ? 'bg-primary-100 text-primary-700'
                                     : 'hover:bg-secondary-50 text-secondary-600'
                                 }`}
                               >
-                                {subcategory.name}
+                                <span>{subcategory.name}</span>
+                                {hasPermission('wiki:write') && (
+                                  <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingItem({ type: 'subcategory', data: subcategory });
+                                        setCreateType('subcategory');
+                                        setShowCreateModal(true);
+                                      }}
+                                      className="p-1 hover:bg-secondary-200 rounded"
+                                      title="Edit Subcategory"
+                                    >
+                                      <Edit className="h-3 w-3" />
+                                    </button>
+                                    {hasPermission('wiki:delete') && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteSubcategory(subcategory.id, subcategory.name);
+                                        }}
+                                        className="p-1 hover:bg-red-200 rounded text-red-600"
+                                        title="Delete Subcategory"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                               </button>
                             ))}
                         </div>
