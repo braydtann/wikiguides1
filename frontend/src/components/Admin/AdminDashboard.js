@@ -472,7 +472,7 @@ const AdminDashboard = () => {
                   </select>
                 </div>
                 
-                {systemSettings?.storage_provider === 'google_drive' && (
+                {editingSettings?.storage_provider === 'google_drive' && (
                   <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                     <div className="flex items-center mb-2">
                       <AlertCircle className="h-5 w-5 text-blue-600 mr-2" />
