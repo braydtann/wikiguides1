@@ -17,18 +17,138 @@ const WikiContext = createContext();
 
 export const WikiProvider = ({ children }) => {
   const { token } = useAuth();
+  
+  // Enhanced state for multi-wiki system
+  const [wikis, setWikis] = useState([]);
+  const [selectedWiki, setSelectedWiki] = useState(null);
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [articles, setArticles] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
 
-  // Fetch categories
-  const fetchCategories = async () => {
+  // =============== WIKI MANAGEMENT ===============
+
+  // Fetch all wikis
+  const fetchWikis = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/wiki/categories`, {
+      const response = await fetch(`${API_BASE_URL}/api/wikis`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setWikis(data);
+      }
+    } catch (error) {
+      console.error('Error fetching wikis:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Create wiki
+  const createWiki = async (wikiData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/wikis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(wikiData)
+      });
+      
+      if (response.ok) {
+        const newWiki = await response.json();
+        setWikis(prev => [...prev, newWiki]);
+        return { success: true, data: newWiki };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create wiki');
+      }
+    } catch (error) {
+      console.error('Error creating wiki:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Update wiki
+  const updateWiki = async (wikiId, wikiData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/wikis/${wikiId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(wikiData)
+      });
+      
+      if (response.ok) {
+        const updatedWiki = await response.json();
+        setWikis(prev => 
+          prev.map(wiki => wiki.id === wikiId ? updatedWiki : wiki)
+        );
+        if (selectedWiki?.id === wikiId) {
+          setSelectedWiki(updatedWiki);
+        }
+        return { success: true, data: updatedWiki };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update wiki');
+      }
+    } catch (error) {
+      console.error('Error updating wiki:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Delete wiki
+  const deleteWiki = async (wikiId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/wikis/${wikiId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        setWikis(prev => prev.filter(wiki => wiki.id !== wikiId));
+        if (selectedWiki?.id === wikiId) {
+          setSelectedWiki(null);
+          setCategories([]);
+          setSubcategories([]);
+          setArticles([]);
+        }
+        return { success: true };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to delete wiki');
+      }
+    } catch (error) {
+      console.error('Error deleting wiki:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // =============== CATEGORY MANAGEMENT ===============
+
+  // Fetch categories
+  const fetchCategories = async (wikiId = null) => {
+    setLoading(true);
+    try {
+      const targetWikiId = wikiId || selectedWiki?.id;
+      const url = targetWikiId 
+        ? `${API_BASE_URL}/api/wiki/categories?wiki_id=${targetWikiId}`
+        : `${API_BASE_URL}/api/wiki/categories`;
+        
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -53,7 +173,10 @@ export const WikiProvider = ({ children }) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(categoryData)
+        body: JSON.stringify({
+          ...categoryData,
+          wiki_id: selectedWiki?.id
+        })
       });
       
       if (response.ok) {
@@ -110,6 +233,11 @@ export const WikiProvider = ({ children }) => {
       
       if (response.ok) {
         setCategories(prev => prev.filter(cat => cat.id !== categoryId));
+        if (selectedCategory?.id === categoryId) {
+          setSelectedCategory(null);
+          setSubcategories([]);
+          setArticles([]);
+        }
         return { success: true };
       } else {
         const error = await response.json();
@@ -121,15 +249,22 @@ export const WikiProvider = ({ children }) => {
     }
   };
 
+  // =============== SUBCATEGORY MANAGEMENT ===============
+
   // Fetch subcategories
-  const fetchSubcategories = async (categoryId) => {
+  const fetchSubcategories = async (categoryId, includeNested = true) => {
+    if (!categoryId) return;
+    
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/wiki/categories/${categoryId}/subcategories`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      const response = await fetch(
+        `${API_BASE_URL}/api/wiki/categories/${categoryId}/subcategories?include_nested=${includeNested}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         }
-      });
+      );
       if (response.ok) {
         const data = await response.json();
         setSubcategories(data);
@@ -155,7 +290,10 @@ export const WikiProvider = ({ children }) => {
       
       if (response.ok) {
         const newSubcategory = await response.json();
-        setSubcategories(prev => [...prev, newSubcategory]);
+        // Refresh subcategories to get proper nested structure
+        if (selectedCategory) {
+          await fetchSubcategories(selectedCategory.id);
+        }
         return { success: true, data: newSubcategory };
       } else {
         const error = await response.json();
@@ -181,9 +319,10 @@ export const WikiProvider = ({ children }) => {
       
       if (response.ok) {
         const updatedSubcategory = await response.json();
-        setSubcategories(prev => 
-          prev.map(sub => sub.id === subcategoryId ? updatedSubcategory : sub)
-        );
+        // Refresh subcategories to get proper nested structure
+        if (selectedCategory) {
+          await fetchSubcategories(selectedCategory.id);
+        }
         return { success: true, data: updatedSubcategory };
       } else {
         const error = await response.json();
@@ -206,7 +345,14 @@ export const WikiProvider = ({ children }) => {
       });
       
       if (response.ok) {
-        setSubcategories(prev => prev.filter(sub => sub.id !== subcategoryId));
+        // Refresh subcategories to get proper nested structure
+        if (selectedCategory) {
+          await fetchSubcategories(selectedCategory.id);
+        }
+        if (selectedSubcategory?.id === subcategoryId) {
+          setSelectedSubcategory(null);
+          setArticles([]);
+        }
         return { success: true };
       } else {
         const error = await response.json();
@@ -218,12 +364,17 @@ export const WikiProvider = ({ children }) => {
     }
   };
 
+  // =============== ARTICLE MANAGEMENT ===============
+
   // Fetch articles
   const fetchArticles = async (filters = {}) => {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams();
       
+      if (filters.wiki_id || selectedWiki?.id) {
+        queryParams.append('wiki_id', filters.wiki_id || selectedWiki.id);
+      }
       if (filters.subcategory_id) {
         queryParams.append('subcategory_id', filters.subcategory_id);
       }
@@ -232,6 +383,12 @@ export const WikiProvider = ({ children }) => {
       }
       if (filters.search_query) {
         queryParams.append('search_query', filters.search_query);
+      }
+      if (filters.visibility) {
+        queryParams.append('visibility', filters.visibility);
+      }
+      if (filters.tags) {
+        queryParams.append('tags', filters.tags);
       }
 
       const response = await fetch(`${API_BASE_URL}/api/wiki/articles?${queryParams}`, {
@@ -347,6 +504,8 @@ export const WikiProvider = ({ children }) => {
     }
   };
 
+  // =============== SEARCH FUNCTIONALITY ===============
+
   // Search functionality
   const searchContent = async (query) => {
     try {
@@ -366,21 +525,31 @@ export const WikiProvider = ({ children }) => {
     }
   };
 
-  // Auto-fetch categories on mount
+  // Auto-fetch wikis on mount
   useEffect(() => {
     if (token) {
-      fetchCategories();
+      fetchWikis();
     }
   }, [token]);
 
   const value = {
     // State
+    wikis,
+    selectedWiki,
     categories,
     subcategories,
     articles,
     selectedCategory,
     selectedSubcategory,
     loading,
+    viewMode,
+
+    // Wiki functions
+    fetchWikis,
+    createWiki,
+    updateWiki,
+    deleteWiki,
+    setSelectedWiki,
 
     // Category functions
     fetchCategories,
@@ -404,9 +573,10 @@ export const WikiProvider = ({ children }) => {
     // Search
     searchContent,
 
-    // Selection
+    // Selection and view
     setSelectedCategory,
-    setSelectedSubcategory
+    setSelectedSubcategory,
+    setViewMode
   };
 
   return (
