@@ -184,6 +184,88 @@ class ArticleVersion(BaseModel):
     updated_by: str
     change_notes: Optional[str] = None
 
+# Flow models
+class FlowCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    visibility: ArticleVisibility = ArticleVisibility.INTERNAL
+    tags: Optional[List[str]] = []
+
+class FlowResponse(BaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
+    visibility: ArticleVisibility
+    tags: List[str]
+    version: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    created_by: str
+    updated_by: str
+
+class FlowStepCreate(BaseModel):
+    flow_id: str
+    step_order: int
+    step_type: FlowStepType
+    question_text: str
+    description: Optional[str] = None
+    options: Optional[List[Dict[str, Any]]] = []  # For multiple choice: [{"text": "Option 1", "value": "opt1", "next_step": "step_id"}]
+    validation_rules: Optional[Dict[str, Any]] = {}  # For text input validation
+    conditional_logic: Optional[Dict[str, Any]] = {}  # For conditional branches
+    subflow_id: Optional[str] = None  # For subflow steps
+    images: Optional[List[str]] = []  # Base64 encoded images
+    is_required: bool = True
+
+class FlowStepResponse(BaseModel):
+    id: str
+    flow_id: str
+    step_order: int
+    step_type: FlowStepType
+    question_text: str
+    description: Optional[str] = None
+    options: List[Dict[str, Any]]
+    validation_rules: Dict[str, Any]
+    conditional_logic: Dict[str, Any]
+    subflow_id: Optional[str] = None
+    images: List[str]
+    is_required: bool
+    created_at: datetime
+    updated_at: datetime
+
+class FlowExecutionCreate(BaseModel):
+    flow_id: str
+    session_data: Optional[Dict[str, Any]] = {}
+
+class FlowExecutionResponse(BaseModel):
+    id: str
+    flow_id: str
+    user_id: Optional[str] = None
+    session_id: str
+    status: FlowExecutionStatus
+    current_step_id: Optional[str] = None
+    answers: Dict[str, Any]
+    session_data: Dict[str, Any]
+    url_path: str  # For resumable sessions
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    last_activity: datetime
+
+class FlowStepAnswer(BaseModel):
+    step_id: str
+    answer: Any  # Can be string, number, list, etc.
+    metadata: Optional[Dict[str, Any]] = {}
+
+class FlowSummary(BaseModel):
+    execution_id: str
+    flow_title: str
+    completed_steps: List[Dict[str, Any]]
+    total_time_seconds: int
+    summary_text: str
+    summary_markdown: str
+    summary_json: Dict[str, Any]
+    generated_at: datetime
+
 # Role-based permissions mapping
 ROLE_PERMISSIONS = {
     UserRole.ADMIN: [
