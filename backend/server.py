@@ -534,6 +534,135 @@ async def update_user_role(
     
     return {"message": "User role updated successfully"}
 
+# Enhanced Wiki/Knowledge Base Routes
+@app.post("/api/wikis", response_model=WikiResponse)
+async def create_wiki(
+    wiki_data: WikiCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_WRITE)
+    
+    wiki_id = str(uuid.uuid4())
+    wiki_doc = {
+        "id": wiki_id,
+        "name": wiki_data.name,
+        "description": wiki_data.description,
+        "icon": wiki_data.icon,
+        "color": wiki_data.color,
+        "is_public": wiki_data.is_public,
+        "allowed_roles": [role.value for role in wiki_data.allowed_roles],
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "created_by": current_user["id"]
+    }
+    
+    db.wikis.insert_one(wiki_doc)
+    
+    # Get counts
+    wiki_doc["categories_count"] = 0
+    wiki_doc["articles_count"] = 0
+    
+    return WikiResponse(**wiki_doc)
+
+@app.get("/api/wikis", response_model=List[WikiResponse])
+async def get_wikis(current_user: dict = Depends(get_current_user)):
+    check_permission(current_user, AppPermission.WIKI_READ)
+    
+    user_role = UserRole(current_user["role"])
+    
+    # Build query based on permissions
+    query = {}
+    if user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        query = {
+            "$or": [
+                {"is_public": True},
+                {"allowed_roles": {"$in": [user_role.value]}}
+            ]
+        }
+    
+    wikis = list(db.wikis.find(query, {"_id": 0}))
+    
+    # Add counts for each wiki
+    for wiki in wikis:
+        wiki["categories_count"] = db.wiki_categories.count_documents({"wiki_id": wiki["id"]})
+        wiki["articles_count"] = db.wiki_articles.count_documents({"wiki_id": wiki["id"]})
+    
+    return [WikiResponse(**wiki) for wiki in wikis]
+
+@app.get("/api/wikis/{wiki_id}", response_model=WikiResponse)
+async def get_wiki(
+    wiki_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_READ)
+    
+    wiki = db.wikis.find_one({"id": wiki_id}, {"_id": 0})
+    if not wiki:
+        raise HTTPException(status_code=404, detail="Wiki not found")
+    
+    # Check permission to access this wiki
+    user_role = UserRole(current_user["role"])
+    if (not wiki["is_public"] and 
+        user_role.value not in wiki["allowed_roles"] and 
+        user_role not in [UserRole.ADMIN]):
+        raise HTTPException(status_code=403, detail="Access denied to this wiki")
+    
+    # Add counts
+    wiki["categories_count"] = db.wiki_categories.count_documents({"wiki_id": wiki_id})
+    wiki["articles_count"] = db.wiki_articles.count_documents({"wiki_id": wiki_id})
+    
+    return WikiResponse(**wiki)
+
+@app.put("/api/wikis/{wiki_id}", response_model=WikiResponse)
+async def update_wiki(
+    wiki_id: str,
+    wiki_data: WikiUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_WRITE)
+    
+    wiki = db.wikis.find_one({"id": wiki_id})
+    if not wiki:
+        raise HTTPException(status_code=404, detail="Wiki not found")
+    
+    update_data = {k: v for k, v in wiki_data.dict().items() if v is not None}
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        if "allowed_roles" in update_data:
+            update_data["allowed_roles"] = [role.value for role in update_data["allowed_roles"]]
+        
+        db.wikis.update_one({"id": wiki_id}, {"$set": update_data})
+    
+    updated_wiki = db.wikis.find_one({"id": wiki_id}, {"_id": 0})
+    updated_wiki["categories_count"] = db.wiki_categories.count_documents({"wiki_id": wiki_id})
+    updated_wiki["articles_count"] = db.wiki_articles.count_documents({"wiki_id": wiki_id})
+    
+    return WikiResponse(**updated_wiki)
+
+@app.delete("/api/wikis/{wiki_id}")
+async def delete_wiki(
+    wiki_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_DELETE)
+    
+    wiki = db.wikis.find_one({"id": wiki_id})
+    if not wiki:
+        raise HTTPException(status_code=404, detail="Wiki not found")
+    
+    # Delete all associated categories, subcategories, and articles
+    categories = list(db.wiki_categories.find({"wiki_id": wiki_id}))
+    for category in categories:
+        subcategories = list(db.wiki_subcategories.find({"category_id": category["id"]}))
+        for subcategory in subcategories:
+            db.wiki_articles.delete_many({"subcategory_id": subcategory["id"]})
+        db.wiki_subcategories.delete_many({"category_id": category["id"]})
+    
+    db.wiki_categories.delete_many({"wiki_id": wiki_id})
+    db.wikis.delete_one({"id": wiki_id})
+    
+    return {"message": "Wiki deleted successfully"}
+
 # Wiki Category routes
 @app.post("/api/wiki/categories", response_model=CategoryResponse)
 async def create_category(
