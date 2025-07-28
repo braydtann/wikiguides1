@@ -506,9 +506,9 @@ const AdminDashboard = () => {
                   </div>
                   <input 
                     type="checkbox" 
-                    checked={systemSettings?.analytics_enabled || false}
+                    checked={editingSettings?.analytics_enabled || false}
+                    onChange={(e) => handleSettingsChange('analytics_enabled', e.target.checked)}
                     className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-secondary-300 rounded"
-                    onChange={(e) => {/* Handle change */}}
                   />
                 </div>
                 
