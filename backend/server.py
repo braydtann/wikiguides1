@@ -1317,6 +1317,212 @@ async def get_flow_summary(
         generated_at=datetime.utcnow()
     )
 
+# Admin and Analytics routes
+@app.get("/api/admin/analytics", response_model=AnalyticsResponse)
+async def get_analytics(current_user: dict = Depends(get_current_user)):
+    check_permission(current_user, AppPermission.ADMIN_ACCESS)
+    
+    # Calculate date ranges
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    
+    # User analytics
+    total_users = db.users.count_documents({})
+    active_users_last_30_days = db.users.count_documents({
+        "updated_at": {"$gte": thirty_days_ago}
+    })
+    
+    # Wiki analytics
+    total_wiki_articles = db.wiki_articles.count_documents({})
+    articles_created_last_30_days = db.wiki_articles.count_documents({
+        "created_at": {"$gte": thirty_days_ago}
+    })
+    
+    # Flow analytics
+    total_flows = db.flows.count_documents({"is_active": True})
+    flows_created_last_30_days = db.flows.count_documents({
+        "created_at": {"$gte": thirty_days_ago},
+        "is_active": True
+    })
+    
+    # Execution analytics
+    total_flow_executions = db.flow_executions.count_documents({})
+    executions_last_30_days = db.flow_executions.count_documents({
+        "started_at": {"$gte": thirty_days_ago}
+    })
+    
+    # Most popular articles (placeholder logic - can be enhanced)
+    most_popular_articles = list(db.wiki_articles.find(
+        {}, {"_id": 0, "title": 1, "created_at": 1, "created_by": 1}
+    ).sort("created_at", -1).limit(5))
+    
+    # Most executed flows
+    pipeline = [
+        {"$match": {"started_at": {"$gte": thirty_days_ago}}},
+        {"$group": {"_id": "$flow_id", "execution_count": {"$sum": 1}}},
+        {"$sort": {"execution_count": -1}},
+        {"$limit": 5}
+    ]
+    
+    most_executed_flows_data = list(db.flow_executions.aggregate(pipeline))
+    most_executed_flows = []
+    
+    for item in most_executed_flows_data:
+        flow = db.flows.find_one({"id": item["_id"]}, {"_id": 0, "title": 1, "created_by": 1})
+        if flow:
+            most_executed_flows.append({
+                "title": flow["title"],
+                "execution_count": item["execution_count"],
+                "created_by": flow["created_by"]
+            })
+    
+    # User activity by role
+    user_activity_by_role = {}
+    for role in UserRole:
+        count = db.users.count_documents({"role": role.value})
+        user_activity_by_role[role.value] = count
+    
+    # Storage usage (placeholder)
+    storage_usage = {
+        "total_storage_mb": 0,
+        "articles_storage_mb": 0,
+        "images_storage_mb": 0,
+        "flows_storage_mb": 0
+    }
+    
+    return AnalyticsResponse(
+        total_users=total_users,
+        active_users_last_30_days=active_users_last_30_days,
+        total_wiki_articles=total_wiki_articles,
+        articles_created_last_30_days=articles_created_last_30_days,
+        total_flows=total_flows,
+        flows_created_last_30_days=flows_created_last_30_days,
+        total_flow_executions=total_flow_executions,
+        executions_last_30_days=executions_last_30_days,
+        most_popular_articles=most_popular_articles,
+        most_executed_flows=most_executed_flows,
+        user_activity_by_role=user_activity_by_role,
+        storage_usage=storage_usage
+    )
+
+@app.get("/api/admin/settings", response_model=SystemSettings)
+async def get_system_settings(current_user: dict = Depends(get_current_user)):
+    check_permission(current_user, AppPermission.ADMIN_ACCESS)
+    
+    settings = db.system_settings.find_one({"type": "global"}) or {}
+    
+    return SystemSettings(
+        storage_provider=settings.get("storage_provider"),
+        storage_config=settings.get("storage_config", {}),
+        email_notifications=settings.get("email_notifications", False),
+        email_config=settings.get("email_config", {}),
+        analytics_enabled=settings.get("analytics_enabled", True),
+        backup_enabled=settings.get("backup_enabled", False),
+        backup_config=settings.get("backup_config", {})
+    )
+
+@app.put("/api/admin/settings", response_model=SystemSettings)
+async def update_system_settings(
+    settings: SystemSettings,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.ADMIN_ACCESS)
+    
+    settings_doc = {
+        "type": "global",
+        "storage_provider": settings.storage_provider,
+        "storage_config": settings.storage_config,
+        "email_notifications": settings.email_notifications,
+        "email_config": settings.email_config,
+        "analytics_enabled": settings.analytics_enabled,
+        "backup_enabled": settings.backup_enabled,
+        "backup_config": settings.backup_config,
+        "updated_at": datetime.utcnow(),
+        "updated_by": current_user["id"]
+    }
+    
+    db.system_settings.update_one(
+        {"type": "global"},
+        {"$set": settings_doc},
+        upsert=True
+    )
+    
+    return settings
+
+@app.get("/api/admin/users", response_model=List[UserResponse])
+async def get_all_users_admin(current_user: dict = Depends(get_current_user)):
+    check_permission(current_user, AppPermission.ADMIN_ACCESS)
+    
+    users = list(db.users.find({}, {"_id": 0, "password_hash": 0}))
+    return [UserResponse(**user) for user in users]
+
+@app.get("/api/admin/recent-activity")
+async def get_recent_activity(
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.ADMIN_ACCESS)
+    
+    # Get recent articles
+    recent_articles = list(db.wiki_articles.find(
+        {}, {"_id": 0, "title": 1, "created_at": 1, "created_by": 1}
+    ).sort("created_at", -1).limit(20))
+    
+    # Get recent flows
+    recent_flows = list(db.flows.find(
+        {"is_active": True}, {"_id": 0, "title": 1, "created_at": 1, "created_by": 1}
+    ).sort("created_at", -1).limit(20))
+    
+    # Get recent executions
+    recent_executions = list(db.flow_executions.find(
+        {}, {"_id": 0, "flow_id": 1, "started_at": 1, "user_id": 1, "status": 1}
+    ).sort("started_at", -1).limit(20))
+    
+    # Combine and format activities
+    activities = []
+    
+    for article in recent_articles:
+        activities.append({
+            "type": "article_created",
+            "title": f"Article '{article['title']}' created",
+            "timestamp": article["created_at"],
+            "user_id": article["created_by"]
+        })
+    
+    for flow in recent_flows:
+        activities.append({
+            "type": "flow_created", 
+            "title": f"Flow '{flow['title']}' created",
+            "timestamp": flow["created_at"],
+            "user_id": flow["created_by"]
+        })
+    
+    for execution in recent_executions:
+        flow = db.flows.find_one({"id": execution["flow_id"]}, {"title": 1})
+        flow_title = flow["title"] if flow else "Unknown Flow"
+        activities.append({
+            "type": "flow_executed",
+            "title": f"Flow '{flow_title}' executed",
+            "timestamp": execution["started_at"],
+            "user_id": execution.get("user_id"),
+            "status": execution["status"]
+        })
+    
+    # Sort by timestamp and limit
+    activities.sort(key=lambda x: x["timestamp"], reverse=True)
+    return activities[:limit]
+
+# Helper function to log user activity
+def log_user_activity(user_id: str, action: str, resource_type: str = None, resource_id: str = None, metadata: dict = None):
+    activity_doc = {
+        "user_id": user_id,
+        "action": action,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "metadata": metadata or {},
+        "timestamp": datetime.utcnow()
+    }
+    db.user_activity_logs.insert_one(activity_doc)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
