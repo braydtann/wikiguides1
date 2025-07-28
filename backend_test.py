@@ -1647,6 +1647,386 @@ class BackendTester:
         except Exception as e:
             self.log_test("Flow Error Handling", False, f"Flow error handling test failed with exception: {str(e)}")
             return False
+
+    # Admin and Analytics Tests
+    def test_admin_login(self):
+        """Test login as admin user for Admin API testing"""
+        try:
+            login_data = {
+                "email": "admin@wikiguides.com",
+                "password": "admin123"
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/api/auth/login",
+                json=login_data,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "access_token" in data and "user" in data:
+                    self.auth_token = data["access_token"]
+                    if data["user"]["role"] == "admin":
+                        self.log_test("Admin Login", True, "Admin logged in successfully for Admin API testing", 
+                                    {"user_email": data["user"]["email"], "role": data["user"]["role"]})
+                        return True
+                    else:
+                        self.log_test("Admin Login", False, f"User role is {data['user']['role']}, expected admin", data)
+                        return False
+                else:
+                    self.log_test("Admin Login", False, "Invalid login response structure", data)
+                    return False
+            else:
+                self.log_test("Admin Login", False, f"Admin login failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Login", False, f"Admin login failed with exception: {str(e)}")
+            return False
+
+    def test_admin_analytics(self):
+        """Test GET /api/admin/analytics endpoint"""
+        if not self.auth_token:
+            self.log_test("Admin Analytics", False, "No auth token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/admin/analytics", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = [
+                    "total_users", "active_users_last_30_days", "total_wiki_articles", 
+                    "articles_created_last_30_days", "total_flows", "flows_created_last_30_days",
+                    "total_flow_executions", "executions_last_30_days", "most_popular_articles",
+                    "most_executed_flows", "user_activity_by_role", "storage_usage"
+                ]
+                
+                if all(field in data for field in expected_fields):
+                    # Validate data types and basic structure
+                    if (isinstance(data["total_users"], int) and
+                        isinstance(data["active_users_last_30_days"], int) and
+                        isinstance(data["total_wiki_articles"], int) and
+                        isinstance(data["most_popular_articles"], list) and
+                        isinstance(data["most_executed_flows"], list) and
+                        isinstance(data["user_activity_by_role"], dict) and
+                        isinstance(data["storage_usage"], dict)):
+                        
+                        self.log_test("Admin Analytics", True, "Analytics data retrieved successfully", 
+                                    {"total_users": data["total_users"], 
+                                     "total_articles": data["total_wiki_articles"],
+                                     "total_flows": data["total_flows"]})
+                        return True
+                    else:
+                        self.log_test("Admin Analytics", False, "Analytics data has incorrect types", data)
+                        return False
+                else:
+                    missing_fields = [field for field in expected_fields if field not in data]
+                    self.log_test("Admin Analytics", False, f"Missing required fields: {missing_fields}", data)
+                    return False
+            else:
+                self.log_test("Admin Analytics", False, f"Get analytics failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Analytics", False, f"Get analytics failed with exception: {str(e)}")
+            return False
+
+    def test_admin_get_settings(self):
+        """Test GET /api/admin/settings endpoint"""
+        if not self.auth_token:
+            self.log_test("Admin Get Settings", False, "No auth token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/admin/settings", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                expected_fields = [
+                    "storage_provider", "storage_config", "email_notifications", 
+                    "email_config", "analytics_enabled", "backup_enabled", "backup_config"
+                ]
+                
+                if all(field in data for field in expected_fields):
+                    # Store current settings for later comparison
+                    self.current_settings = data
+                    self.log_test("Admin Get Settings", True, "System settings retrieved successfully", 
+                                {"analytics_enabled": data["analytics_enabled"], 
+                                 "email_notifications": data["email_notifications"],
+                                 "backup_enabled": data["backup_enabled"]})
+                    return True
+                else:
+                    missing_fields = [field for field in expected_fields if field not in data]
+                    self.log_test("Admin Get Settings", False, f"Missing required fields: {missing_fields}", data)
+                    return False
+            else:
+                self.log_test("Admin Get Settings", False, f"Get settings failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Get Settings", False, f"Get settings failed with exception: {str(e)}")
+            return False
+
+    def test_admin_update_settings(self):
+        """Test PUT /api/admin/settings endpoint"""
+        if not self.auth_token:
+            self.log_test("Admin Update Settings", False, "No auth token available")
+            return False
+            
+        try:
+            # Test settings update
+            update_data = {
+                "storage_provider": "google_drive",
+                "storage_config": {"bucket": "test-bucket"},
+                "email_notifications": False,
+                "email_config": {"smtp_server": "smtp.test.com"},
+                "analytics_enabled": True,
+                "backup_enabled": True,
+                "backup_config": {"frequency": "daily"}
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            response = self.session.put(
+                f"{self.base_url}/api/admin/settings",
+                json=update_data,
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Verify the updated settings match what we sent
+                if (data["storage_provider"] == update_data["storage_provider"] and
+                    data["email_notifications"] == update_data["email_notifications"] and
+                    data["analytics_enabled"] == update_data["analytics_enabled"] and
+                    data["backup_enabled"] == update_data["backup_enabled"]):
+                    
+                    self.log_test("Admin Update Settings", True, "System settings updated successfully", 
+                                {"storage_provider": data["storage_provider"],
+                                 "email_notifications": data["email_notifications"],
+                                 "analytics_enabled": data["analytics_enabled"],
+                                 "backup_enabled": data["backup_enabled"]})
+                    return True
+                else:
+                    self.log_test("Admin Update Settings", False, "Updated settings don't match expected values", data)
+                    return False
+            else:
+                self.log_test("Admin Update Settings", False, f"Update settings failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Update Settings", False, f"Update settings failed with exception: {str(e)}")
+            return False
+
+    def test_admin_get_users(self):
+        """Test GET /api/admin/users endpoint"""
+        if not self.auth_token:
+            self.log_test("Admin Get Users", False, "No auth token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/admin/users", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, list):
+                    if len(data) > 0:
+                        # Check if admin user exists in the list
+                        admin_found = any(user.get("email") == "admin@wikiguides.com" and 
+                                        user.get("role") == "admin" for user in data)
+                        
+                        if admin_found:
+                            # Verify user data structure
+                            first_user = data[0]
+                            expected_fields = ["id", "email", "full_name", "role", "is_active", "created_at"]
+                            
+                            if all(field in first_user for field in expected_fields):
+                                self.log_test("Admin Get Users", True, f"Users retrieved successfully ({len(data)} users)", 
+                                            {"user_count": len(data), "admin_found": True})
+                                return True
+                            else:
+                                missing_fields = [field for field in expected_fields if field not in first_user]
+                                self.log_test("Admin Get Users", False, f"User data missing fields: {missing_fields}", first_user)
+                                return False
+                        else:
+                            self.log_test("Admin Get Users", False, "Admin user not found in users list", data)
+                            return False
+                    else:
+                        self.log_test("Admin Get Users", False, "No users found in system", data)
+                        return False
+                else:
+                    self.log_test("Admin Get Users", False, "Users response is not a list", data)
+                    return False
+            else:
+                self.log_test("Admin Get Users", False, f"Get users failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Get Users", False, f"Get users failed with exception: {str(e)}")
+            return False
+
+    def test_admin_recent_activity(self):
+        """Test GET /api/admin/recent-activity endpoint"""
+        if not self.auth_token:
+            self.log_test("Admin Recent Activity", False, "No auth token available")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.auth_token}"}
+            response = self.session.get(f"{self.base_url}/api/admin/recent-activity", headers=headers)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if isinstance(data, list):
+                    # Activity list can be empty, that's fine
+                    if len(data) > 0:
+                        # Check structure of activity items
+                        first_activity = data[0]
+                        expected_fields = ["type", "title", "timestamp", "user_id"]
+                        
+                        if all(field in first_activity for field in expected_fields):
+                            # Check if we have different types of activities
+                            activity_types = set(activity.get("type") for activity in data)
+                            self.log_test("Admin Recent Activity", True, f"Recent activity retrieved successfully ({len(data)} activities)", 
+                                        {"activity_count": len(data), "activity_types": list(activity_types)})
+                            return True
+                        else:
+                            missing_fields = [field for field in expected_fields if field not in first_activity]
+                            self.log_test("Admin Recent Activity", False, f"Activity data missing fields: {missing_fields}", first_activity)
+                            return False
+                    else:
+                        self.log_test("Admin Recent Activity", True, "Recent activity retrieved successfully (no activities yet)", 
+                                    {"activity_count": 0})
+                        return True
+                else:
+                    self.log_test("Admin Recent Activity", False, "Recent activity response is not a list", data)
+                    return False
+            else:
+                self.log_test("Admin Recent Activity", False, f"Get recent activity failed with status {response.status_code}", 
+                            {"status_code": response.status_code, "text": response.text})
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Recent Activity", False, f"Get recent activity failed with exception: {str(e)}")
+            return False
+
+    def test_admin_permissions_validation(self):
+        """Test that only admin users can access admin endpoints"""
+        try:
+            # First, create a viewer user for testing
+            viewer_data = {
+                "email": "viewer@wikiguides.com",
+                "password": "viewer123",
+                "full_name": "Viewer User",
+                "role": "viewer"
+            }
+            
+            # Register viewer user (using admin token)
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            register_response = self.session.post(
+                f"{self.base_url}/api/auth/register",
+                json=viewer_data,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            # Login as viewer
+            login_response = self.session.post(
+                f"{self.base_url}/api/auth/login",
+                json={"email": "viewer@wikiguides.com", "password": "viewer123"},
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if login_response.status_code == 200:
+                viewer_token = login_response.json()["access_token"]
+                viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
+                
+                # Try to access admin analytics with viewer token
+                analytics_response = self.session.get(f"{self.base_url}/api/admin/analytics", headers=viewer_headers)
+                
+                if analytics_response.status_code == 403:
+                    # Try to access admin settings with viewer token
+                    settings_response = self.session.get(f"{self.base_url}/api/admin/settings", headers=viewer_headers)
+                    
+                    if settings_response.status_code == 403:
+                        self.log_test("Admin Permissions Validation", True, "Admin endpoints properly protected from non-admin users", 
+                                    {"analytics_status": analytics_response.status_code, 
+                                     "settings_status": settings_response.status_code})
+                        return True
+                    else:
+                        self.log_test("Admin Permissions Validation", False, f"Settings endpoint accessible to viewer (status: {settings_response.status_code})")
+                        return False
+                else:
+                    self.log_test("Admin Permissions Validation", False, f"Analytics endpoint accessible to viewer (status: {analytics_response.status_code})")
+                    return False
+            else:
+                self.log_test("Admin Permissions Validation", False, "Could not login as viewer user for permission test")
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Permissions Validation", False, f"Permission validation test failed with exception: {str(e)}")
+            return False
+
+    def test_admin_error_handling(self):
+        """Test error handling for admin endpoints"""
+        if not self.auth_token:
+            self.log_test("Admin Error Handling", False, "No auth token available")
+            return False
+            
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.auth_token}",
+                "Content-Type": "application/json"
+            }
+            
+            # Test 1: Try to update settings with invalid data
+            invalid_settings = {
+                "storage_provider": "invalid_provider",  # Should be valid provider
+                "email_notifications": "not_a_boolean",  # Should be boolean
+                "analytics_enabled": "invalid"  # Should be boolean
+            }
+            
+            response1 = self.session.put(
+                f"{self.base_url}/api/admin/settings",
+                json=invalid_settings,
+                headers=headers
+            )
+            
+            # Test 2: Try to access admin endpoint with invalid token
+            invalid_headers = {"Authorization": "Bearer invalid_token"}
+            response2 = self.session.get(f"{self.base_url}/api/admin/analytics", headers=invalid_headers)
+            
+            if response2.status_code == 401:
+                self.log_test("Admin Error Handling", True, "Error handling working correctly for admin endpoints", 
+                            {"invalid_settings_status": response1.status_code, 
+                             "invalid_token_status": response2.status_code})
+                return True
+            else:
+                self.log_test("Admin Error Handling", False, f"Expected 401 for invalid token, got {response2.status_code}")
+                return False
+                
+        except Exception as e:
+            self.log_test("Admin Error Handling", False, f"Admin error handling test failed with exception: {str(e)}")
+            return False
     
     def run_all_tests(self):
         """Run all backend tests in sequence"""
