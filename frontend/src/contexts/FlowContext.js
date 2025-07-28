@@ -382,7 +382,12 @@ export const FlowProvider = ({ children }) => {
     submitStepResponse,
     getFlowSession,
     generateFlowSummary,
-    setCurrentSession
+    setCurrentSession,
+
+    // Compatibility aliases for components
+    getFlowExecution,
+    submitStepAnswer,
+    getFlowSummary
   };
 
   return (
