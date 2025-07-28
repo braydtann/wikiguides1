@@ -15,9 +15,11 @@ import {
 } from 'lucide-react';
 
 const AdminDashboard = () => {
-  const { analytics, systemSettings, allUsers, recentActivity, fetchAnalytics, loading } = useAdmin();
+  const { analytics, systemSettings, allUsers, recentActivity, fetchAnalytics, fetchSystemSettings, updateSystemSettings, loading } = useAdmin();
   const { hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
+  const [editingSettings, setEditingSettings] = useState(null);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     if (hasPermission('admin:access')) {
