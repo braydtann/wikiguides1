@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 
-// Auto-detect backend URL - in Kubernetes, /api routes are automatically routed to backend
+// In production Kubernetes environment, use relative URLs that will be routed by ingress
 const getBackendUrl = () => {
   const envUrl = process.env.REACT_APP_BACKEND_URL;
-  if (envUrl && envUrl.trim() !== '') {
+  if (envUrl && envUrl.trim() !== '' && envUrl.trim() !== 'undefined') {
     return envUrl;
   }
-  // In Kubernetes environment, use current origin for /api routes
-  return window.location.origin;
+  // Use relative URLs - Kubernetes ingress will route /api to backend service
+  return '';
 };
 
 const API_BASE_URL = getBackendUrl();
