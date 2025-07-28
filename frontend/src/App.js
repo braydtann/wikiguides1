@@ -9,7 +9,7 @@ import Navigation from './components/Layout/Navigation';
 import LoginForm from './components/Auth/LoginForm';
 import RegisterForm from './components/Auth/RegisterForm';
 import Dashboard from './components/Dashboard/Dashboard';
-import WikiBrowser from './components/Wiki/WikiBrowser';
+import EnhancedWikiBrowser from './components/Wiki/EnhancedWikiBrowser';
 import FlowBrowser from './components/Flow/FlowBrowser';
 import FlowExecutor from './components/Flow/FlowExecutor';
 import AdminDashboard from './components/Admin/AdminDashboard';
