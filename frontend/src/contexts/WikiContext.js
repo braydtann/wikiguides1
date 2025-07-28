@@ -1,19 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
 import { useAuth } from './AuthContext';
-import toast from 'react-hot-toast';
 
-const WikiContext = createContext();
-
-export const useWiki = () => {
-  const context = useContext(WikiContext);
-  if (!context) {
-    throw new Error('useWiki must be used within a WikiProvider');
+// Auto-detect backend URL - in Kubernetes, /api routes are automatically routed to backend
+const getBackendUrl = () => {
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  if (envUrl && envUrl.trim() !== '') {
+    return envUrl;
   }
-  return context;
+  // In Kubernetes environment, use current origin for /api routes
+  return window.location.origin;
 };
 
-const API_BASE_URL = process.env.REACT_APP_BACKEND_URL;
+const API_BASE_URL = getBackendUrl();
+
+const WikiContext = createContext();
 
 export const WikiProvider = ({ children }) => {
   const { token } = useAuth();
@@ -24,22 +24,21 @@ export const WikiProvider = ({ children }) => {
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const headers = {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
-
   // Fetch categories
   const fetchCategories = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/api/wiki/categories`, { headers });
-      setCategories(response.data);
-      return response.data;
+      const response = await fetch(`${API_BASE_URL}/api/wiki/categories`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data);
+      }
     } catch (error) {
-      toast.error('Failed to fetch categories');
       console.error('Error fetching categories:', error);
-      return [];
     } finally {
       setLoading(false);
     }
@@ -48,59 +47,95 @@ export const WikiProvider = ({ children }) => {
   // Create category
   const createCategory = async (categoryData) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/wiki/categories`, categoryData, { headers });
-      setCategories(prev => [...prev, response.data]);
-      toast.success('Category created successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/categories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(categoryData)
+      });
+      
+      if (response.ok) {
+        const newCategory = await response.json();
+        setCategories(prev => [...prev, newCategory]);
+        return { success: true, data: newCategory };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create category');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to create category';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error creating category:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Update category
   const updateCategory = async (categoryId, categoryData) => {
     try {
-      const response = await axios.put(`${API_BASE_URL}/api/wiki/categories/${categoryId}`, categoryData, { headers });
-      setCategories(prev => prev.map(cat => cat.id === categoryId ? response.data : cat));
-      toast.success('Category updated successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/categories/${categoryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(categoryData)
+      });
+      
+      if (response.ok) {
+        const updatedCategory = await response.json();
+        setCategories(prev => 
+          prev.map(cat => cat.id === categoryId ? updatedCategory : cat)
+        );
+        return { success: true, data: updatedCategory };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update category');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to update category';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error updating category:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Delete category
   const deleteCategory = async (categoryId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/api/wiki/categories/${categoryId}`, { headers });
-      setCategories(prev => prev.filter(cat => cat.id !== categoryId));
-      toast.success('Category deleted successfully');
-      return { success: true };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/categories/${categoryId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        setCategories(prev => prev.filter(cat => cat.id !== categoryId));
+        return { success: true };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to delete category');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to delete category';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error deleting category:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Fetch subcategories
-  const fetchSubcategories = async (categoryId = null) => {
+  const fetchSubcategories = async (categoryId) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const url = categoryId 
-        ? `${API_BASE_URL}/api/wiki/subcategories?category_id=${categoryId}`
-        : `${API_BASE_URL}/api/wiki/subcategories`;
-      const response = await axios.get(url, { headers });
-      setSubcategories(response.data);
-      return response.data;
+      const response = await fetch(`${API_BASE_URL}/api/wiki/categories/${categoryId}/subcategories`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSubcategories(data);
+      }
     } catch (error) {
-      toast.error('Failed to fetch subcategories');
       console.error('Error fetching subcategories:', error);
-      return [];
     } finally {
       setLoading(false);
     }
@@ -109,136 +144,229 @@ export const WikiProvider = ({ children }) => {
   // Create subcategory
   const createSubcategory = async (subcategoryData) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/wiki/subcategories`, subcategoryData, { headers });
-      setSubcategories(prev => [...prev, response.data]);
-      toast.success('Subcategory created successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/subcategories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(subcategoryData)
+      });
+      
+      if (response.ok) {
+        const newSubcategory = await response.json();
+        setSubcategories(prev => [...prev, newSubcategory]);
+        return { success: true, data: newSubcategory };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create subcategory');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to create subcategory';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error creating subcategory:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Update subcategory
+  const updateSubcategory = async (subcategoryId, subcategoryData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/wiki/subcategories/${subcategoryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(subcategoryData)
+      });
+      
+      if (response.ok) {
+        const updatedSubcategory = await response.json();
+        setSubcategories(prev => 
+          prev.map(sub => sub.id === subcategoryId ? updatedSubcategory : sub)
+        );
+        return { success: true, data: updatedSubcategory };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update subcategory');
+      }
+    } catch (error) {
+      console.error('Error updating subcategory:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Delete subcategory
   const deleteSubcategory = async (subcategoryId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/api/wiki/subcategories/${subcategoryId}`, { headers });
-      setSubcategories(prev => prev.filter(sub => sub.id !== subcategoryId));
-      toast.success('Subcategory deleted successfully');
-      return { success: true };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/subcategories/${subcategoryId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        setSubcategories(prev => prev.filter(sub => sub.id !== subcategoryId));
+        return { success: true };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to delete subcategory');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to delete subcategory';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error deleting subcategory:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Fetch articles
   const fetchArticles = async (filters = {}) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (filters.subcategory_id) params.append('subcategory_id', filters.subcategory_id);
-      if (filters.search) params.append('search', filters.search);
-      if (filters.tags) params.append('tags', filters.tags);
-      if (filters.visibility) params.append('visibility', filters.visibility);
+      const queryParams = new URLSearchParams();
+      
+      if (filters.subcategory_id) {
+        queryParams.append('subcategory_id', filters.subcategory_id);
+      }
+      if (filters.category_id) {
+        queryParams.append('category_id', filters.category_id);
+      }
+      if (filters.search_query) {
+        queryParams.append('search_query', filters.search_query);
+      }
 
-      const response = await axios.get(`${API_BASE_URL}/api/wiki/articles?${params}`, { headers });
-      setArticles(response.data);
-      return response.data;
+      const response = await fetch(`${API_BASE_URL}/api/wiki/articles?${queryParams}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setArticles(data);
+      }
     } catch (error) {
-      toast.error('Failed to fetch articles');
       console.error('Error fetching articles:', error);
-      return [];
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Get single article
-  const getArticle = async (articleId) => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/wiki/articles/${articleId}`, { headers });
-      return { success: true, data: response.data };
-    } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to fetch article';
-      toast.error(message);
-      return { success: false, error: message };
     }
   };
 
   // Create article
   const createArticle = async (articleData) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/wiki/articles`, articleData, { headers });
-      setArticles(prev => [...prev, response.data]);
-      toast.success('Article created successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/articles`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(articleData)
+      });
+      
+      if (response.ok) {
+        const newArticle = await response.json();
+        setArticles(prev => [...prev, newArticle]);
+        return { success: true, data: newArticle };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create article');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to create article';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error creating article:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Update article
-  const updateArticle = async (articleId, articleData, changeNotes = '') => {
+  const updateArticle = async (articleId, articleData) => {
     try {
-      const response = await axios.put(
-        `${API_BASE_URL}/api/wiki/articles/${articleId}?change_notes=${encodeURIComponent(changeNotes)}`,
-        articleData,
-        { headers }
-      );
-      setArticles(prev => prev.map(article => article.id === articleId ? response.data : article));
-      toast.success('Article updated successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/articles/${articleId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(articleData)
+      });
+      
+      if (response.ok) {
+        const updatedArticle = await response.json();
+        setArticles(prev => 
+          prev.map(article => article.id === articleId ? updatedArticle : article)
+        );
+        return { success: true, data: updatedArticle };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update article');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to update article';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error updating article:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Delete article
   const deleteArticle = async (articleId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/api/wiki/articles/${articleId}`, { headers });
-      setArticles(prev => prev.filter(article => article.id !== articleId));
-      toast.success('Article deleted successfully');
-      return { success: true };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/articles/${articleId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        setArticles(prev => prev.filter(article => article.id !== articleId));
+        return { success: true };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to delete article');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to delete article';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error deleting article:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Get article versions
   const getArticleVersions = async (articleId) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/wiki/articles/${articleId}/versions`, { headers });
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/articles/${articleId}/versions`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        return await response.json();
+      }
+      return [];
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to fetch article versions';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error fetching article versions:', error);
+      return [];
     }
   };
 
-  // Search wiki
-  const searchWiki = async (query) => {
+  // Search functionality
+  const searchContent = async (query) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/wiki/search?q=${encodeURIComponent(query)}`, { headers });
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/wiki/search?q=${encodeURIComponent(query)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        return await response.json();
+      }
+      return { articles: [], categories: [], subcategories: [] };
     } catch (error) {
-      const message = error.response?.data?.detail || 'Search failed';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error searching content:', error);
+      return { articles: [], categories: [], subcategories: [] };
     }
   };
 
-  // Load initial data
+  // Auto-fetch categories on mount
   useEffect(() => {
     if (token) {
       fetchCategories();
@@ -254,31 +382,31 @@ export const WikiProvider = ({ children }) => {
     selectedSubcategory,
     loading,
 
-    // Setters
-    setSelectedCategory,
-    setSelectedSubcategory,
-
-    // Category methods
+    // Category functions
     fetchCategories,
     createCategory,
     updateCategory,
     deleteCategory,
 
-    // Subcategory methods
+    // Subcategory functions
     fetchSubcategories,
     createSubcategory,
+    updateSubcategory,
     deleteSubcategory,
 
-    // Article methods
+    // Article functions
     fetchArticles,
-    getArticle,
     createArticle,
     updateArticle,
     deleteArticle,
     getArticleVersions,
 
     // Search
-    searchWiki,
+    searchContent,
+
+    // Selection
+    setSelectedCategory,
+    setSelectedSubcategory
   };
 
   return (
@@ -286,4 +414,12 @@ export const WikiProvider = ({ children }) => {
       {children}
     </WikiContext.Provider>
   );
+};
+
+export const useWiki = () => {
+  const context = useContext(WikiContext);
+  if (!context) {
+    throw new Error('useWiki must be used within a WikiProvider');
+  }
+  return context;
 };

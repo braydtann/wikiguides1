@@ -1,111 +1,131 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
-import toast from 'react-hot-toast';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 
-const AuthContext = createContext();
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+// Auto-detect backend URL - in Kubernetes, /api routes are automatically routed to backend
+const getBackendUrl = () => {
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  if (envUrl && envUrl.trim() !== '') {
+    return envUrl;
   }
-  return context;
+  // In Kubernetes environment, use current origin for /api routes
+  return window.location.origin;
 };
 
-const API_BASE_URL = process.env.REACT_APP_BACKEND_URL;
+const API_BASE_URL = getBackendUrl();
+
+const AuthContext = createContext({});
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
+  const [loading, setLoading] = useState(true);
 
-  // Configure axios defaults
   useEffect(() => {
     if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      checkAuth();
     } else {
-      delete axios.defaults.headers.common['Authorization'];
-    }
-  }, [token]);
-
-  // Check if user is authenticated on app load
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (token) {
-        try {
-          const response = await axios.get(`${API_BASE_URL}/api/auth/me`);
-          setUser(response.data);
-        } catch (error) {
-          console.error('Authentication check failed:', error);
-          logout();
-        }
-      }
       setLoading(false);
-    };
+    }
+  }, []);
 
-    checkAuth();
-  }, [token]);
-
-  const login = async (email, password) => {
+  const checkAuth = async () => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
-        email,
-        password,
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
-
-      const { access_token, user: userData } = response.data;
       
-      setToken(access_token);
-      setUser(userData);
-      localStorage.setItem('token', access_token);
-      
-      toast.success('Welcome back!');
-      return { success: true };
+      if (response.ok) {
+        const userData = await response.json();
+        setUser(userData);
+      } else {
+        localStorage.removeItem('token');
+        setToken(null);
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Login failed';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Auth check failed:', error);
+      localStorage.removeItem('token');
+      setToken(null);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const register = async (userData) => {
+  const login = async (email, password) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/register`, userData);
-      toast.success('Account created successfully! Please log in.');
-      return { success: true, user: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        setToken(data.access_token);
+        setUser(data.user);
+        localStorage.setItem('token', data.access_token);
+        return { success: true, user: data.user };
+      } else {
+        return { success: false, error: data.detail || 'Login failed' };
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Registration failed';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Login error:', error);
+      return { success: false, error: 'Network error - please check your connection' };
+    }
+  };
+
+  const register = async (email, password, fullName, role = 'contributor') => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          email, 
+          password, 
+          full_name: fullName,
+          role 
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.ok) {
+        return { success: true, user: data };
+      } else {
+        return { success: false, error: data.detail || 'Registration failed' };
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      return { success: false, error: 'Network error - please check your connection' };
     }
   };
 
   const logout = () => {
-    setToken(null);
     setUser(null);
+    setToken(null);
     localStorage.removeItem('token');
-    delete axios.defaults.headers.common['Authorization'];
-    toast.success('Logged out successfully');
   };
 
   const hasPermission = (permission) => {
     if (!user) return false;
     
-    // Role-based permissions mapping (client-side)
+    // Role-based permissions
     const rolePermissions = {
-      admin: [
-        'wiki:read', 'wiki:write', 'wiki:delete',
-        'flow:read', 'flow:write', 'flow:delete', 'flow:execute',
-        'user:manage', 'admin:access'
-      ],
+      admin: ['*'], // Admin has all permissions
       manager: [
-        'wiki:read', 'wiki:write',
-        'flow:read', 'flow:write', 'flow:execute',
-        'user:manage'
+        'wiki:read', 'wiki:write', 'wiki:delete',
+        'flow:read', 'flow:write', 'flow:delete',
+        'user:read', 'analytics:read'
       ],
       agent: [
         'wiki:read', 'wiki:write',
-        'flow:read', 'flow:execute'
+        'flow:read', 'flow:execute',
+        'user:read'
       ],
       contributor: [
         'wiki:read', 'wiki:write',
@@ -118,6 +138,11 @@ export const AuthProvider = ({ children }) => {
     };
 
     const userPermissions = rolePermissions[user.role] || [];
+    
+    // Check if user has admin permission (all permissions)
+    if (userPermissions.includes('*')) return true;
+    
+    // Check specific permission
     return userPermissions.includes(permission);
   };
 
@@ -129,7 +154,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     hasPermission,
-    isAuthenticated: !!user,
+    checkAuth
   };
 
   return (
@@ -137,4 +162,12 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

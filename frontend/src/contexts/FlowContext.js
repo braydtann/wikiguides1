@@ -1,118 +1,143 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
 import { useAuth } from './AuthContext';
-import toast from 'react-hot-toast';
 
-const FlowContext = createContext();
-
-export const useFlow = () => {
-  const context = useContext(FlowContext);
-  if (!context) {
-    throw new Error('useFlow must be used within a FlowProvider');
+// Auto-detect backend URL - in Kubernetes, /api routes are automatically routed to backend
+const getBackendUrl = () => {
+  const envUrl = process.env.REACT_APP_BACKEND_URL;
+  if (envUrl && envUrl.trim() !== '') {
+    return envUrl;
   }
-  return context;
+  // In Kubernetes environment, use current origin for /api routes
+  return window.location.origin;
 };
 
-const API_BASE_URL = process.env.REACT_APP_BACKEND_URL;
+const API_BASE_URL = getBackendUrl();
+
+const FlowContext = createContext();
 
 export const FlowProvider = ({ children }) => {
   const { token } = useAuth();
   const [flows, setFlows] = useState([]);
-  const [currentFlow, setCurrentFlow] = useState(null);
-  const [currentExecution, setCurrentExecution] = useState(null);
+  const [selectedFlow, setSelectedFlow] = useState(null);
   const [flowSteps, setFlowSteps] = useState([]);
+  const [currentSession, setCurrentSession] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const headers = {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  };
-
-  // Fetch flows
-  const fetchFlows = async (filters = {}) => {
+  // Fetch all flows
+  const fetchFlows = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (filters.search) params.append('search', filters.search);
-      if (filters.tags) params.append('tags', filters.tags);
-
-      const response = await axios.get(`${API_BASE_URL}/api/flows?${params}`, { headers });
-      setFlows(response.data);
-      return response.data;
+      const response = await fetch(`${API_BASE_URL}/api/flows`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFlows(data);
+      }
     } catch (error) {
-      toast.error('Failed to fetch flows');
       console.error('Error fetching flows:', error);
-      return [];
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Get single flow
-  const getFlow = async (flowId) => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/flows/${flowId}`, { headers });
-      return { success: true, data: response.data };
-    } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to fetch flow';
-      toast.error(message);
-      return { success: false, error: message };
     }
   };
 
   // Create flow
   const createFlow = async (flowData) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/flows`, flowData, { headers });
-      setFlows(prev => [...prev, response.data]);
-      toast.success('Flow created successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/flows`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(flowData)
+      });
+      
+      if (response.ok) {
+        const newFlow = await response.json();
+        setFlows(prev => [...prev, newFlow]);
+        return { success: true, data: newFlow };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create flow');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to create flow';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error creating flow:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Update flow
   const updateFlow = async (flowId, flowData) => {
     try {
-      const response = await axios.put(`${API_BASE_URL}/api/flows/${flowId}`, flowData, { headers });
-      setFlows(prev => prev.map(flow => flow.id === flowId ? response.data : flow));
-      toast.success('Flow updated successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/flows/${flowId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(flowData)
+      });
+      
+      if (response.ok) {
+        const updatedFlow = await response.json();
+        setFlows(prev => 
+          prev.map(flow => flow.id === flowId ? updatedFlow : flow)
+        );
+        return { success: true, data: updatedFlow };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update flow');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to update flow';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error updating flow:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Delete flow
   const deleteFlow = async (flowId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/api/flows/${flowId}`, { headers });
-      setFlows(prev => prev.filter(flow => flow.id !== flowId));
-      toast.success('Flow deleted successfully');
-      return { success: true };
+      const response = await fetch(`${API_BASE_URL}/api/flows/${flowId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        setFlows(prev => prev.filter(flow => flow.id !== flowId));
+        const message = 'Flow deleted successfully';
+        return { success: true, message };
+      } else {
+        const error = await response.json();
+        const message = error.detail || 'Failed to delete flow';
+        throw new Error(message);
+      }
     } catch (error) {
+      console.error('Error deleting flow:', error);
       const message = error.response?.data?.detail || 'Failed to delete flow';
-      toast.error(message);
       return { success: false, error: message };
     }
   };
 
   // Fetch flow steps
   const fetchFlowSteps = async (flowId) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/api/flows/${flowId}/steps`, { headers });
-      setFlowSteps(response.data);
-      return response.data;
+      const response = await fetch(`${API_BASE_URL}/api/flows/${flowId}/steps`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFlowSteps(data);
+      }
     } catch (error) {
-      toast.error('Failed to fetch flow steps');
       console.error('Error fetching flow steps:', error);
-      return [];
     } finally {
       setLoading(false);
     }
@@ -121,116 +146,173 @@ export const FlowProvider = ({ children }) => {
   // Create flow step
   const createFlowStep = async (flowId, stepData) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/flows/${flowId}/steps`, stepData, { headers });
-      setFlowSteps(prev => [...prev, response.data].sort((a, b) => a.step_order - b.step_order));
-      toast.success('Step created successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/flows/${flowId}/steps`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(stepData)
+      });
+      
+      if (response.ok) {
+        const newStep = await response.json();
+        setFlowSteps(prev => [...prev, newStep]);
+        return { success: true, data: newStep };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create step');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to create step';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error creating step:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Update flow step
-  const updateFlowStep = async (flowId, stepId, stepData) => {
+  const updateFlowStep = async (stepId, stepData) => {
     try {
-      const response = await axios.put(`${API_BASE_URL}/api/flows/${flowId}/steps/${stepId}`, stepData, { headers });
-      setFlowSteps(prev => prev.map(step => step.id === stepId ? response.data : step).sort((a, b) => a.step_order - b.step_order));
-      toast.success('Step updated successfully');
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/flow-steps/${stepId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(stepData)
+      });
+      
+      if (response.ok) {
+        const updatedStep = await response.json();
+        setFlowSteps(prev => 
+          prev.map(step => step.id === stepId ? updatedStep : step)
+        );
+        return { success: true, data: updatedStep };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to update step');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to update step';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error updating step:', error);
+      return { success: false, error: error.message };
     }
   };
 
   // Delete flow step
-  const deleteFlowStep = async (flowId, stepId) => {
+  const deleteFlowStep = async (stepId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/api/flows/${flowId}/steps/${stepId}`, { headers });
-      setFlowSteps(prev => prev.filter(step => step.id !== stepId));
-      toast.success('Step deleted successfully');
-      return { success: true };
-    } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to delete step';
-      toast.error(message);
-      return { success: false, error: message };
-    }
-  };
-
-  // Start flow execution
-  const startFlowExecution = async (flowId, sessionData = {}) => {
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/flows/${flowId}/execute`, {
-        flow_id: flowId,
-        session_data: sessionData
-      }, { headers });
-      setCurrentExecution(response.data);
-      return { success: true, data: response.data };
-    } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to start flow execution';
-      toast.error(message);
-      return { success: false, error: message };
-    }
-  };
-
-  // Get flow execution
-  const getFlowExecution = async (flowId, sessionId) => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/flows/${flowId}/execute/${sessionId}`, { headers });
-      setCurrentExecution(response.data);
-      return { success: true, data: response.data };
-    } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to get flow execution';
-      return { success: false, error: message };
-    }
-  };
-
-  // Submit step answer
-  const submitStepAnswer = async (flowId, sessionId, stepId, answer, metadata = {}) => {
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/flows/${flowId}/execute/${sessionId}/answer`, {
-        step_id: stepId,
-        answer: answer,
-        metadata: metadata
-      }, { headers });
+      const response = await fetch(`${API_BASE_URL}/api/flow-steps/${stepId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       
-      // Update current execution status
-      if (currentExecution) {
-        const updatedExecution = { ...currentExecution };
-        updatedExecution.answers = updatedExecution.answers || {};
-        updatedExecution.answers[stepId] = {
-          answer: answer,
-          metadata: metadata,
-          answered_at: new Date().toISOString()
-        };
-        updatedExecution.current_step_id = response.data.next_step_id;
-        setCurrentExecution(updatedExecution);
+      if (response.ok) {
+        setFlowSteps(prev => prev.filter(step => step.id !== stepId));
+        return { success: true };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to delete step');
       }
-      
-      return { success: true, data: response.data };
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to submit answer';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error deleting step:', error);
+      return { success: false, error: error.message };
     }
   };
 
-  // Get flow summary
-  const getFlowSummary = async (flowId, sessionId) => {
+  // Flow execution functions
+  const startFlowExecution = async (flowId) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/flows/${flowId}/execute/${sessionId}/summary`, { headers });
-      return { success: true, data: response.data };
+      const response = await fetch(`${API_BASE_URL}/api/flows/${flowId}/execute`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const session = await response.json();
+        setCurrentSession(session);
+        return { success: true, data: session };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to start flow execution');
+      }
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to get flow summary';
-      toast.error(message);
-      return { success: false, error: message };
+      console.error('Error starting flow execution:', error);
+      return { success: false, error: error.message };
     }
   };
 
-  // Load initial data
+  const submitStepResponse = async (sessionId, stepId, response) => {
+    try {
+      const requestResponse = await fetch(`${API_BASE_URL}/api/flow-sessions/${sessionId}/steps/${stepId}/respond`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ response })
+      });
+      
+      if (requestResponse.ok) {
+        const updatedSession = await requestResponse.json();
+        setCurrentSession(updatedSession);
+        return { success: true, data: updatedSession };
+      } else {
+        const error = await requestResponse.json();
+        throw new Error(error.detail || 'Failed to submit response');
+      }
+    } catch (error) {
+      console.error('Error submitting step response:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const getFlowSession = async (sessionId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/flow-sessions/${sessionId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const session = await response.json();
+        setCurrentSession(session);
+        return { success: true, data: session };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to get session');
+      }
+    } catch (error) {
+      console.error('Error getting flow session:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  const generateFlowSummary = async (sessionId, format = 'text') => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/flow-sessions/${sessionId}/summary?format=${format}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const summary = await response.json();
+        return { success: true, data: summary };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to generate summary');
+      }
+    } catch (error) {
+      console.error('Error generating flow summary:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Auto-fetch flows on mount
   useEffect(() => {
     if (token) {
       fetchFlows();
@@ -240,33 +322,30 @@ export const FlowProvider = ({ children }) => {
   const value = {
     // State
     flows,
-    currentFlow,
-    currentExecution,
+    selectedFlow,
     flowSteps,
+    currentSession,
     loading,
 
-    // Setters
-    setCurrentFlow,
-    setCurrentExecution,
-
-    // Flow methods
+    // Flow functions
     fetchFlows,
-    getFlow,
     createFlow,
     updateFlow,
     deleteFlow,
+    setSelectedFlow,
 
-    // Step methods
+    // Step functions
     fetchFlowSteps,
     createFlowStep,
     updateFlowStep,
     deleteFlowStep,
 
-    // Execution methods
+    // Execution functions
     startFlowExecution,
-    getFlowExecution,
-    submitStepAnswer,
-    getFlowSummary,
+    submitStepResponse,
+    getFlowSession,
+    generateFlowSummary,
+    setCurrentSession
   };
 
   return (
@@ -274,4 +353,12 @@ export const FlowProvider = ({ children }) => {
       {children}
     </FlowContext.Provider>
   );
+};
+
+export const useFlow = () => {
+  const context = useContext(FlowContext);
+  if (!context) {
+    throw new Error('useFlow must be used within a FlowProvider');
+  }
+  return context;
 };
