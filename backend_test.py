@@ -2082,7 +2082,19 @@ class BackendTester:
             ("Flow Error Handling", self.test_flow_error_handling)
         ]
         
-        all_tests = basic_tests + wiki_tests + flow_tests
+        # Admin and Analytics Tests
+        admin_tests = [
+            ("Admin Login", self.test_admin_login),
+            ("Admin Analytics", self.test_admin_analytics),
+            ("Admin Get Settings", self.test_admin_get_settings),
+            ("Admin Update Settings", self.test_admin_update_settings),
+            ("Admin Get Users", self.test_admin_get_users),
+            ("Admin Recent Activity", self.test_admin_recent_activity),
+            ("Admin Permissions Validation", self.test_admin_permissions_validation),
+            ("Admin Error Handling", self.test_admin_error_handling)
+        ]
+        
+        all_tests = basic_tests + wiki_tests + flow_tests + admin_tests
         passed = 0
         total = len(all_tests)
         
