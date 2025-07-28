@@ -164,8 +164,9 @@ const Dashboard = () => {
             {filteredActions.map((action) => {
               const Icon = action.icon;
               return (
-                <div
+                <Link
                   key={action.name}
+                  to={action.href}
                   className="flex items-center p-3 rounded-lg border border-secondary-200 hover:border-primary-300 hover:bg-primary-50 transition-all cursor-pointer group"
                 >
                   <div className={`p-2 rounded-lg text-white ${action.color} transition-colors`}>
@@ -179,7 +180,7 @@ const Dashboard = () => {
                       {action.description}
                     </p>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
