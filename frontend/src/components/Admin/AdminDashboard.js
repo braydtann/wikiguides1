@@ -542,8 +542,12 @@ const AdminDashboard = () => {
           </div>
 
           <div className="mt-8 pt-6 border-t border-secondary-200">
-            <button className="btn-primary">
-              Save Settings
+            <button 
+              onClick={handleSaveSettings}
+              disabled={savingSettings || !editingSettings}
+              className="btn-primary"
+            >
+              {savingSettings ? 'Saving...' : 'Save Settings'}
             </button>
           </div>
         </div>
