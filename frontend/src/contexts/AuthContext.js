@@ -47,14 +47,12 @@ export const AuthProvider = ({ children }) => {
   }, [token]);
 
   const login = async (email, password) => {
-    console.log('🔧 DEBUG: Attempting login with URL:', `${API_BASE_URL}/api/auth/login`);
     try {
       const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
         email,
         password,
       });
 
-      console.log('🔧 DEBUG: Login response:', response.data);
       const { access_token, user: userData } = response.data;
       
       setToken(access_token);
