@@ -226,7 +226,10 @@ const Dashboard = () => {
             })}
           </div>
           <div className="mt-4 pt-4 border-t border-secondary-200">
-            <button className="text-sm text-primary-600 hover:text-primary-700 font-medium">
+            <button 
+              onClick={handleViewAllActivity}
+              className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+            >
               View all activity →
             </button>
           </div>
