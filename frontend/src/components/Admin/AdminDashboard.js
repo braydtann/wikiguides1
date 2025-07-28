@@ -24,8 +24,43 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (hasPermission('admin:access')) {
       fetchAnalytics();
+      fetchSystemSettings();
     }
   }, []);
+
+  useEffect(() => {
+    if (systemSettings && !editingSettings) {
+      setEditingSettings({ ...systemSettings });
+    }
+  }, [systemSettings]);
+
+  const handleSettingsChange = (field, value) => {
+    setEditingSettings(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSaveSettings = async () => {
+    if (!editingSettings) return;
+    
+    setSavingSettings(true);
+    try {
+      const result = await updateSystemSettings(editingSettings);
+      if (result.success) {
+        // Settings updated successfully
+      }
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  const handleConfigureGoogleDrive = () => {
+    // For now, just show an alert - in a real app you'd open OAuth flow
+    alert('Google Drive configuration would open OAuth flow. This is a demo implementation.');
+  };
 
   if (!hasPermission('admin:access')) {
     return (
