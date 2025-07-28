@@ -800,7 +800,7 @@ async def delete_category(
     
     return {"message": "Category deleted successfully"}
 
-# Wiki Subcategory routes
+# Enhanced Wiki Subcategory routes with nested support
 @app.post("/api/wiki/subcategories", response_model=SubcategoryResponse)
 async def create_subcategory(
     subcategory_data: SubcategoryCreate,
@@ -808,10 +808,27 @@ async def create_subcategory(
 ):
     check_permission(current_user, AppPermission.WIKI_WRITE)
     
-    # Verify category exists
+    # Verify category exists and get wiki_id
     category = db.wiki_categories.find_one({"id": subcategory_data.category_id})
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Verify wiki access
+    wiki = db.wikis.find_one({"id": category["wiki_id"]})
+    if wiki:
+        user_role = UserRole(current_user["role"])
+        if (not wiki["is_public"] and 
+            user_role.value not in wiki["allowed_roles"] and 
+            user_role not in [UserRole.ADMIN]):
+            raise HTTPException(status_code=403, detail="Access denied to this wiki")
+    
+    # If parent_subcategory_id is provided, verify it exists and belongs to the same category
+    if subcategory_data.parent_subcategory_id:
+        parent_subcategory = db.wiki_subcategories.find_one({"id": subcategory_data.parent_subcategory_id})
+        if not parent_subcategory:
+            raise HTTPException(status_code=404, detail="Parent subcategory not found")
+        if parent_subcategory["category_id"] != subcategory_data.category_id:
+            raise HTTPException(status_code=400, detail="Parent subcategory must belong to the same category")
     
     subcategory_id = str(uuid.uuid4())
     subcategory_doc = {
@@ -819,26 +836,121 @@ async def create_subcategory(
         "name": subcategory_data.name,
         "description": subcategory_data.description,
         "category_id": subcategory_data.category_id,
+        "parent_subcategory_id": subcategory_data.parent_subcategory_id,
+        "order_index": subcategory_data.order_index,
         "created_at": datetime.utcnow(),
-        "created_by": current_user["id"]
+        "updated_at": datetime.utcnow()
     }
     
     db.wiki_subcategories.insert_one(subcategory_doc)
+    
+    # Add counts and nested subcategories
+    subcategory_doc["nested_subcategories"] = []
+    subcategory_doc["articles_count"] = 0
+    
     return SubcategoryResponse(**subcategory_doc)
 
-@app.get("/api/wiki/subcategories", response_model=List[SubcategoryResponse])
+@app.get("/api/wiki/categories/{category_id}/subcategories", response_model=List[SubcategoryResponse])
 async def get_subcategories(
-    category_id: Optional[str] = None,
+    category_id: str,
+    include_nested: bool = True,
     current_user: dict = Depends(get_current_user)
 ):
     check_permission(current_user, AppPermission.WIKI_READ)
     
-    query = {}
-    if category_id:
-        query["category_id"] = category_id
+    # Verify category exists and wiki access
+    category = db.wiki_categories.find_one({"id": category_id})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
     
-    subcategories = list(db.wiki_subcategories.find(query, {"_id": 0}))
-    return [SubcategoryResponse(**subcat) for subcat in subcategories]
+    # Verify wiki access
+    wiki = db.wikis.find_one({"id": category["wiki_id"]})
+    if wiki:
+        user_role = UserRole(current_user["role"])
+        if (not wiki["is_public"] and 
+            user_role.value not in wiki["allowed_roles"] and 
+            user_role not in [UserRole.ADMIN]):
+            raise HTTPException(status_code=403, detail="Access denied to this wiki")
+    
+    # Get all subcategories for the category
+    all_subcategories = list(db.wiki_subcategories.find(
+        {"category_id": category_id}, 
+        {"_id": 0}
+    ).sort("order_index", 1))
+    
+    # Add counts for each subcategory
+    for subcat in all_subcategories:
+        subcat["articles_count"] = db.wiki_articles.count_documents({"subcategory_id": subcat["id"]})
+    
+    if not include_nested:
+        # Return flat list with empty nested_subcategories
+        for subcat in all_subcategories:
+            subcat["nested_subcategories"] = []
+        return [SubcategoryResponse(**subcat) for subcat in all_subcategories]
+    
+    # Build nested structure
+    subcategory_map = {subcat["id"]: subcat for subcat in all_subcategories}
+    root_subcategories = []
+    
+    for subcat in all_subcategories:
+        subcat["nested_subcategories"] = []
+        
+        if subcat["parent_subcategory_id"]:
+            # This is a nested subcategory
+            parent = subcategory_map.get(subcat["parent_subcategory_id"])
+            if parent:
+                parent["nested_subcategories"].append(subcat)
+        else:
+            # This is a root-level subcategory
+            root_subcategories.append(subcat)
+    
+    return [SubcategoryResponse(**subcat) for subcat in root_subcategories]
+
+@app.put("/api/wiki/subcategories/{subcategory_id}", response_model=SubcategoryResponse)
+async def update_subcategory(
+    subcategory_id: str,
+    subcategory_data: SubcategoryUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_WRITE)
+    
+    subcategory = db.wiki_subcategories.find_one({"id": subcategory_id})
+    if not subcategory:
+        raise HTTPException(status_code=404, detail="Subcategory not found")
+    
+    # Verify wiki access through category
+    category = db.wiki_categories.find_one({"id": subcategory["category_id"]})
+    if category:
+        wiki = db.wikis.find_one({"id": category["wiki_id"]})
+        if wiki:
+            user_role = UserRole(current_user["role"])
+            if (not wiki["is_public"] and 
+                user_role.value not in wiki["allowed_roles"] and 
+                user_role not in [UserRole.ADMIN]):
+                raise HTTPException(status_code=403, detail="Access denied to this wiki")
+    
+    # If parent_subcategory_id is being updated, verify it's valid
+    if subcategory_data.parent_subcategory_id is not None:
+        if subcategory_data.parent_subcategory_id:
+            parent_subcategory = db.wiki_subcategories.find_one({"id": subcategory_data.parent_subcategory_id})
+            if not parent_subcategory:
+                raise HTTPException(status_code=404, detail="Parent subcategory not found")
+            if parent_subcategory["category_id"] != subcategory["category_id"]:
+                raise HTTPException(status_code=400, detail="Parent subcategory must belong to the same category")
+            # Prevent circular references
+            if subcategory_data.parent_subcategory_id == subcategory_id:
+                raise HTTPException(status_code=400, detail="Subcategory cannot be its own parent")
+    
+    update_data = {k: v for k, v in subcategory_data.dict().items() if v is not None}
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        db.wiki_subcategories.update_one({"id": subcategory_id}, {"$set": update_data})
+    
+    updated_subcategory = db.wiki_subcategories.find_one({"id": subcategory_id}, {"_id": 0})
+    updated_subcategory["nested_subcategories"] = []
+    updated_subcategory["articles_count"] = db.wiki_articles.count_documents({"subcategory_id": subcategory_id})
+    
+    return SubcategoryResponse(**updated_subcategory)
 
 @app.delete("/api/wiki/subcategories/{subcategory_id}")
 async def delete_subcategory(
@@ -847,16 +959,25 @@ async def delete_subcategory(
 ):
     check_permission(current_user, AppPermission.WIKI_DELETE)
     
-    # Check if subcategory has articles
-    articles = db.wiki_articles.find_one({"subcategory_id": subcategory_id})
-    if articles:
-        raise HTTPException(status_code=400, detail="Cannot delete subcategory with articles")
-    
-    result = db.wiki_subcategories.delete_one({"id": subcategory_id})
-    if result.deleted_count == 0:
+    subcategory = db.wiki_subcategories.find_one({"id": subcategory_id})
+    if not subcategory:
         raise HTTPException(status_code=404, detail="Subcategory not found")
     
-    return {"message": "Subcategory deleted successfully"}
+    # Delete all articles in this subcategory
+    db.wiki_articles.delete_many({"subcategory_id": subcategory_id})
+    
+    # Delete all nested subcategories and their articles (recursive deletion)
+    def delete_nested_subcategories(parent_id):
+        nested = list(db.wiki_subcategories.find({"parent_subcategory_id": parent_id}))
+        for nested_subcat in nested:
+            delete_nested_subcategories(nested_subcat["id"])
+            db.wiki_articles.delete_many({"subcategory_id": nested_subcat["id"]})
+            db.wiki_subcategories.delete_one({"id": nested_subcat["id"]})
+    
+    delete_nested_subcategories(subcategory_id)
+    db.wiki_subcategories.delete_one({"id": subcategory_id})
+    
+    return {"message": "Subcategory and all nested content deleted successfully"}
 
 # Wiki Article routes
 @app.post("/api/wiki/articles", response_model=ArticleResponse)
