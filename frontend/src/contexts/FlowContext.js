@@ -43,6 +43,29 @@ export const FlowProvider = ({ children }) => {
     }
   };
 
+  // Get single flow by ID
+  const getFlow = async (flowId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/flows/${flowId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const flow = await response.json();
+        setSelectedFlow(flow);
+        return { success: true, data: flow };
+      } else {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to get flow');
+      }
+    } catch (error) {
+      console.error('Error getting flow:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
   // Create flow
   const createFlow = async (flowData) => {
     try {
