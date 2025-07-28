@@ -154,7 +154,8 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     hasPermission,
-    checkAuth
+    checkAuth,
+    isAuthenticated: !!user && !!token
   };
 
   return (
