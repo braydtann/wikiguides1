@@ -9,8 +9,8 @@ import json
 import sys
 from datetime import datetime
 
-# Backend URL - using production backend service
-BACKEND_URL = "https://wikiguides1-backend.emergentmind.com"
+# Backend URL - using local backend service
+BACKEND_URL = "http://localhost:8001"
 
 class BackendTester:
     def __init__(self):
