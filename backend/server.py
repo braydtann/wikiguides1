@@ -663,7 +663,7 @@ async def delete_wiki(
     
     return {"message": "Wiki deleted successfully"}
 
-# Wiki Category routes
+# Enhanced Wiki Category routes
 @app.post("/api/wiki/categories", response_model=CategoryResponse)
 async def create_category(
     category_data: CategoryCreate,
@@ -671,53 +671,112 @@ async def create_category(
 ):
     check_permission(current_user, AppPermission.WIKI_WRITE)
     
+    # Verify wiki exists and user has access
+    wiki = db.wikis.find_one({"id": category_data.wiki_id})
+    if not wiki:
+        raise HTTPException(status_code=404, detail="Wiki not found")
+    
+    user_role = UserRole(current_user["role"])
+    if (not wiki["is_public"] and 
+        user_role.value not in wiki["allowed_roles"] and 
+        user_role not in [UserRole.ADMIN]):
+        raise HTTPException(status_code=403, detail="Access denied to this wiki")
+    
     category_id = str(uuid.uuid4())
     category_doc = {
         "id": category_id,
         "name": category_data.name,
         "description": category_data.description,
         "icon": category_data.icon,
+        "icon_type": category_data.icon_type,
         "color": category_data.color,
+        "wiki_id": category_data.wiki_id,
+        "order_index": category_data.order_index,
         "created_at": datetime.utcnow(),
-        "created_by": current_user["id"]
+        "updated_at": datetime.utcnow()
     }
     
     db.wiki_categories.insert_one(category_doc)
+    
+    # Add counts
+    category_doc["subcategories_count"] = 0
+    category_doc["articles_count"] = 0
+    
     return CategoryResponse(**category_doc)
 
 @app.get("/api/wiki/categories", response_model=List[CategoryResponse])
-async def get_categories(current_user: dict = Depends(get_current_user)):
+async def get_categories(
+    wiki_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
     check_permission(current_user, AppPermission.WIKI_READ)
     
-    categories = list(db.wiki_categories.find({}, {"_id": 0}))
+    query = {}
+    if wiki_id:
+        # Verify access to specific wiki
+        wiki = db.wikis.find_one({"id": wiki_id})
+        if not wiki:
+            raise HTTPException(status_code=404, detail="Wiki not found")
+            
+        user_role = UserRole(current_user["role"])
+        if (not wiki["is_public"] and 
+            user_role.value not in wiki["allowed_roles"] and 
+            user_role not in [UserRole.ADMIN]):
+            raise HTTPException(status_code=403, detail="Access denied to this wiki")
+        
+        query["wiki_id"] = wiki_id
+    else:
+        # Get categories from all accessible wikis
+        user_role = UserRole(current_user["role"])
+        if user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            accessible_wikis = list(db.wikis.find({
+                "$or": [
+                    {"is_public": True},
+                    {"allowed_roles": {"$in": [user_role.value]}}
+                ]
+            }, {"id": 1}))
+            wiki_ids = [wiki["id"] for wiki in accessible_wikis]
+            query["wiki_id"] = {"$in": wiki_ids}
+    
+    categories = list(db.wiki_categories.find(query, {"_id": 0}).sort("order_index", 1))
+    
+    # Add counts for each category
+    for category in categories:
+        category["subcategories_count"] = db.wiki_subcategories.count_documents({"category_id": category["id"]})
+        category["articles_count"] = db.wiki_articles.count_documents({"category_id": category["id"]})
+    
     return [CategoryResponse(**cat) for cat in categories]
 
 @app.put("/api/wiki/categories/{category_id}", response_model=CategoryResponse)
 async def update_category(
     category_id: str,
-    category_data: CategoryCreate,
+    category_data: CategoryUpdate,
     current_user: dict = Depends(get_current_user)
 ):
     check_permission(current_user, AppPermission.WIKI_WRITE)
     
-    update_data = {
-        "name": category_data.name,
-        "description": category_data.description,
-        "icon": category_data.icon,
-        "color": category_data.color,
-        "updated_at": datetime.utcnow(),
-        "updated_by": current_user["id"]
-    }
-    
-    result = db.wiki_categories.update_one(
-        {"id": category_id},
-        {"$set": update_data}
-    )
-    
-    if result.matched_count == 0:
+    category = db.wiki_categories.find_one({"id": category_id})
+    if not category:
         raise HTTPException(status_code=404, detail="Category not found")
     
+    # Verify access to wiki
+    wiki = db.wikis.find_one({"id": category["wiki_id"]})
+    if wiki:
+        user_role = UserRole(current_user["role"])
+        if (not wiki["is_public"] and 
+            user_role.value not in wiki["allowed_roles"] and 
+            user_role not in [UserRole.ADMIN]):
+            raise HTTPException(status_code=403, detail="Access denied to this wiki")
+    
+    update_data = {k: v for k, v in category_data.dict().items() if v is not None}
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        db.wiki_categories.update_one({"id": category_id}, {"$set": update_data})
+    
     updated_category = db.wiki_categories.find_one({"id": category_id}, {"_id": 0})
+    updated_category["subcategories_count"] = db.wiki_subcategories.count_documents({"category_id": category_id})
+    updated_category["articles_count"] = db.wiki_articles.count_documents({"category_id": category_id})
+    
     return CategoryResponse(**updated_category)
 
 @app.delete("/api/wiki/categories/{category_id}")
@@ -727,14 +786,17 @@ async def delete_category(
 ):
     check_permission(current_user, AppPermission.WIKI_DELETE)
     
-    # Check if category has subcategories
-    subcategories = db.wiki_subcategories.find_one({"category_id": category_id})
-    if subcategories:
-        raise HTTPException(status_code=400, detail="Cannot delete category with subcategories")
-    
-    result = db.wiki_categories.delete_one({"id": category_id})
-    if result.deleted_count == 0:
+    category = db.wiki_categories.find_one({"id": category_id})
+    if not category:
         raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Delete associated subcategories and articles
+    subcategories = list(db.wiki_subcategories.find({"category_id": category_id}))
+    for subcategory in subcategories:
+        db.wiki_articles.delete_many({"subcategory_id": subcategory["id"]})
+    
+    db.wiki_subcategories.delete_many({"category_id": category_id})
+    db.wiki_categories.delete_one({"id": category_id})
     
     return {"message": "Category deleted successfully"}
 
