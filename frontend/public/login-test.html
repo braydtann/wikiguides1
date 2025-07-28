@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Login Test</title>
+</head>
+<body>
+    <h2>WikiGuides Login Test</h2>
+    <div id="status">Testing...</div>
+    <div id="result"></div>
+    
+    <script>
+        async function testLogin() {
+            const statusDiv = document.getElementById('status');
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                statusDiv.innerHTML = 'Sending login request...';
+                
+                const response = await fetch('http://localhost:8001/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@wikiguides.com',
+                        password: 'admin123'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    statusDiv.innerHTML = '✅ Login SUCCESS!';
+                    resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } else {
+                    statusDiv.innerHTML = '❌ Login FAILED!';
+                    const errorData = await response.text();
+                    resultDiv.innerHTML = `Error: ${response.status} - ${errorData}`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '❌ Network ERROR!';
+                resultDiv.innerHTML = `Error: ${error.message}`;
+                console.error('Login test error:', error);
+            }
+        }
+        
+        // Run test on page load
+        testLogin();
+    </script>
+</body>
+</html>
