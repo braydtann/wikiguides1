@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useFlow } from '../../contexts/FlowContext';
 import { useAuth } from '../../contexts/AuthContext';
+import CreateFlowModal from './CreateFlowModal';
 import { 
   GitBranch, 
   Plus, 
