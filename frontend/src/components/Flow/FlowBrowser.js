@@ -275,6 +275,13 @@ const FlowBrowser = () => {
           <div className="text-sm text-secondary-600">Public Flows</div>
         </div>
       </div>
+
+      {/* Create Flow Modal */}
+      <CreateFlowModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={handleCreateSuccess}
+      />
     </div>
   );
 };
