@@ -104,6 +104,74 @@ class TokenResponse(BaseModel):
     token_type: str
     user: UserResponse
 
+# Wiki models
+class CategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = "#3b82f6"
+
+class CategoryResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    color: str
+    created_at: datetime
+    created_by: str
+
+class SubcategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category_id: str
+
+class SubcategoryResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    category_id: str
+    created_at: datetime
+    created_by: str
+
+class ArticleCreate(BaseModel):
+    title: str
+    content: str
+    subcategory_id: str
+    visibility: ArticleVisibility = ArticleVisibility.INTERNAL
+    tags: Optional[List[str]] = []
+    images: Optional[List[str]] = []  # Base64 encoded images
+
+class ArticleUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    visibility: Optional[ArticleVisibility] = None
+    tags: Optional[List[str]] = None
+    images: Optional[List[str]] = None
+
+class ArticleResponse(BaseModel):
+    id: str
+    title: str
+    content: str
+    subcategory_id: str
+    visibility: ArticleVisibility
+    tags: List[str]
+    images: List[str]
+    version: int
+    created_at: datetime
+    updated_at: datetime
+    created_by: str
+    updated_by: str
+
+class ArticleVersion(BaseModel):
+    version: int
+    title: str
+    content: str
+    tags: List[str]
+    images: List[str]
+    updated_at: datetime
+    updated_by: str
+    change_notes: Optional[str] = None
+
 # Role-based permissions mapping
 ROLE_PERMISSIONS = {
     UserRole.ADMIN: [
