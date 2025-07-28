@@ -14,6 +14,8 @@ export const useAuth = () => {
 
 const API_BASE_URL = process.env.REACT_APP_BACKEND_URL;
 
+console.log('🔧 DEBUG: Backend URL being used:', API_BASE_URL);
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
