@@ -266,6 +266,38 @@ class FlowSummary(BaseModel):
     summary_json: Dict[str, Any]
     generated_at: datetime
 
+# Admin models
+class SystemSettings(BaseModel):
+    storage_provider: Optional[str] = None  # 'google_drive', 'aws_s3', 'local'
+    storage_config: Optional[Dict[str, Any]] = {}
+    email_notifications: bool = False
+    email_config: Optional[Dict[str, Any]] = {}
+    analytics_enabled: bool = True
+    backup_enabled: bool = False
+    backup_config: Optional[Dict[str, Any]] = {}
+
+class AnalyticsResponse(BaseModel):
+    total_users: int
+    active_users_last_30_days: int
+    total_wiki_articles: int
+    articles_created_last_30_days: int
+    total_flows: int
+    flows_created_last_30_days: int
+    total_flow_executions: int
+    executions_last_30_days: int
+    most_popular_articles: List[Dict[str, Any]]
+    most_executed_flows: List[Dict[str, Any]]
+    user_activity_by_role: Dict[str, int]
+    storage_usage: Dict[str, Any]
+
+class UserActivityLog(BaseModel):
+    user_id: str
+    action: str  # 'login', 'create_article', 'execute_flow', etc.
+    resource_type: Optional[str] = None  # 'article', 'flow', 'category'
+    resource_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = {}
+    timestamp: datetime
+
 # Role-based permissions mapping
 ROLE_PERMISSIONS = {
     UserRole.ADMIN: [
