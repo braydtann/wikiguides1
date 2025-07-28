@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { WikiProvider } from './contexts/WikiContext';
 import { FlowProvider } from './contexts/FlowContext';
+import { AdminProvider } from './contexts/AdminContext';
 import Navigation from './components/Layout/Navigation';
 import LoginForm from './components/Auth/LoginForm';
 import RegisterForm from './components/Auth/RegisterForm';
@@ -11,6 +12,7 @@ import Dashboard from './components/Dashboard/Dashboard';
 import WikiBrowser from './components/Wiki/WikiBrowser';
 import FlowBrowser from './components/Flow/FlowBrowser';
 import FlowExecutor from './components/Flow/FlowExecutor';
+import AdminDashboard from './components/Admin/AdminDashboard';
 import LoadingSpinner from './components/Common/LoadingSpinner';
 
 // Main App component that handles routing and authentication
