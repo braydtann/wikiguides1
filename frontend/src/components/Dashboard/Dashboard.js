@@ -6,6 +6,19 @@ import { BookOpen, GitBranch, Users, BarChart3, CheckCircle } from 'lucide-react
 
 const Dashboard = () => {
   const { user, hasPermission } = useAuth();
+  const { fetchRecentActivity } = useAdmin();
+  const navigate = useNavigate();
+
+  const handleViewAllActivity = async () => {
+    if (hasPermission('admin:access')) {
+      navigate('/admin');
+    } else {
+      await fetchRecentActivity(100); // Fetch more activity
+      // For now, just redirect to admin or show a simple modal
+      // You could also create a dedicated activity page
+      navigate('/admin');
+    }
+  };
 
   const quickActions = [
     {
