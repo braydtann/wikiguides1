@@ -116,63 +116,126 @@ class TokenResponse(BaseModel):
     token_type: str
     user: UserResponse
 
-# Wiki models
-class CategoryCreate(BaseModel):
+# Enhanced models for knowledge base system
+class WikiCreate(BaseModel):
     name: str
     description: Optional[str] = None
     icon: Optional[str] = None
     color: Optional[str] = "#3b82f6"
+    is_public: bool = False
+    allowed_roles: List[UserRole] = [UserRole.ADMIN, UserRole.MANAGER, UserRole.AGENT]
+
+class WikiResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    color: str = "#3b82f6"
+    is_public: bool = False
+    allowed_roles: List[UserRole]
+    categories_count: int = 0
+    articles_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+    created_by: str
+
+class WikiUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    is_public: Optional[bool] = None
+    allowed_roles: Optional[List[UserRole]] = None
+
+# Enhanced Category model with icons and wiki association
+class CategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    icon_type: Optional[str] = "emoji"  # emoji, lucide, upload
+    color: Optional[str] = "#3b82f6"
+    wiki_id: str
+    order_index: int = 0
 
 class CategoryResponse(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
     icon: Optional[str] = None
-    color: str
+    icon_type: str = "emoji"
+    color: str = "#3b82f6"
+    wiki_id: str
+    order_index: int = 0
+    subcategories_count: int = 0
+    articles_count: int = 0
     created_at: datetime
-    created_by: str
+    updated_at: datetime
 
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    icon_type: Optional[str] = None
+    color: Optional[str] = None
+    order_index: Optional[int] = None
+
+# Enhanced Subcategory model with nested support
 class SubcategoryCreate(BaseModel):
     name: str
     description: Optional[str] = None
     category_id: str
+    parent_subcategory_id: Optional[str] = None  # For nested subcategories
+    order_index: int = 0
 
 class SubcategoryResponse(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
     category_id: str
+    parent_subcategory_id: Optional[str] = None
+    order_index: int = 0
+    nested_subcategories: List['SubcategoryResponse'] = []
+    articles_count: int = 0
     created_at: datetime
-    created_by: str
+    updated_at: datetime
 
+class SubcategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    parent_subcategory_id: Optional[str] = None
+    order_index: Optional[int] = None
+
+# Enhanced Article model
 class ArticleCreate(BaseModel):
     title: str
     content: str
     subcategory_id: str
     visibility: ArticleVisibility = ArticleVisibility.INTERNAL
     tags: Optional[List[str]] = []
-    images: Optional[List[str]] = []  # Base64 encoded images
-
-class ArticleUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
-    visibility: Optional[ArticleVisibility] = None
-    tags: Optional[List[str]] = None
-    images: Optional[List[str]] = None
+    images: Optional[List[str]] = []
 
 class ArticleResponse(BaseModel):
     id: str
     title: str
     content: str
     subcategory_id: str
+    wiki_id: str  # Derived from subcategory
     visibility: ArticleVisibility
-    tags: List[str]
-    images: List[str]
+    tags: List[str] = []
+    images: List[str] = []
     version: int
     created_at: datetime
     updated_at: datetime
     created_by: str
     updated_by: str
+
+class ArticleUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    subcategory_id: Optional[str] = None
+    visibility: Optional[ArticleVisibility] = None
+    tags: Optional[List[str]] = None
+    images: Optional[List[str]] = None
 
 class ArticleVersion(BaseModel):
     version: int
