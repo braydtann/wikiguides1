@@ -19,7 +19,8 @@ import {
   Trash2,
   Eye,
   Settings,
-  Filter
+  Filter,
+  X
 } from 'lucide-react';
 
 const EnhancedWikiBrowser = () => {
