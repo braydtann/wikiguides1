@@ -345,6 +345,398 @@ async def update_user_role(
     
     return {"message": "User role updated successfully"}
 
+# Wiki Category routes
+@app.post("/api/wiki/categories", response_model=CategoryResponse)
+async def create_category(
+    category_data: CategoryCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_WRITE)
+    
+    category_id = str(uuid.uuid4())
+    category_doc = {
+        "id": category_id,
+        "name": category_data.name,
+        "description": category_data.description,
+        "icon": category_data.icon,
+        "color": category_data.color,
+        "created_at": datetime.utcnow(),
+        "created_by": current_user["id"]
+    }
+    
+    db.wiki_categories.insert_one(category_doc)
+    return CategoryResponse(**category_doc)
+
+@app.get("/api/wiki/categories", response_model=List[CategoryResponse])
+async def get_categories(current_user: dict = Depends(get_current_user)):
+    check_permission(current_user, AppPermission.WIKI_READ)
+    
+    categories = list(db.wiki_categories.find({}, {"_id": 0}))
+    return [CategoryResponse(**cat) for cat in categories]
+
+@app.put("/api/wiki/categories/{category_id}", response_model=CategoryResponse)
+async def update_category(
+    category_id: str,
+    category_data: CategoryCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_WRITE)
+    
+    update_data = {
+        "name": category_data.name,
+        "description": category_data.description,
+        "icon": category_data.icon,
+        "color": category_data.color,
+        "updated_at": datetime.utcnow(),
+        "updated_by": current_user["id"]
+    }
+    
+    result = db.wiki_categories.update_one(
+        {"id": category_id},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    updated_category = db.wiki_categories.find_one({"id": category_id}, {"_id": 0})
+    return CategoryResponse(**updated_category)
+
+@app.delete("/api/wiki/categories/{category_id}")
+async def delete_category(
+    category_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_DELETE)
+    
+    # Check if category has subcategories
+    subcategories = db.wiki_subcategories.find_one({"category_id": category_id})
+    if subcategories:
+        raise HTTPException(status_code=400, detail="Cannot delete category with subcategories")
+    
+    result = db.wiki_categories.delete_one({"id": category_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    return {"message": "Category deleted successfully"}
+
+# Wiki Subcategory routes
+@app.post("/api/wiki/subcategories", response_model=SubcategoryResponse)
+async def create_subcategory(
+    subcategory_data: SubcategoryCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_WRITE)
+    
+    # Verify category exists
+    category = db.wiki_categories.find_one({"id": subcategory_data.category_id})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    subcategory_id = str(uuid.uuid4())
+    subcategory_doc = {
+        "id": subcategory_id,
+        "name": subcategory_data.name,
+        "description": subcategory_data.description,
+        "category_id": subcategory_data.category_id,
+        "created_at": datetime.utcnow(),
+        "created_by": current_user["id"]
+    }
+    
+    db.wiki_subcategories.insert_one(subcategory_doc)
+    return SubcategoryResponse(**subcategory_doc)
+
+@app.get("/api/wiki/subcategories", response_model=List[SubcategoryResponse])
+async def get_subcategories(
+    category_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_READ)
+    
+    query = {}
+    if category_id:
+        query["category_id"] = category_id
+    
+    subcategories = list(db.wiki_subcategories.find(query, {"_id": 0}))
+    return [SubcategoryResponse(**subcat) for subcat in subcategories]
+
+@app.delete("/api/wiki/subcategories/{subcategory_id}")
+async def delete_subcategory(
+    subcategory_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_DELETE)
+    
+    # Check if subcategory has articles
+    articles = db.wiki_articles.find_one({"subcategory_id": subcategory_id})
+    if articles:
+        raise HTTPException(status_code=400, detail="Cannot delete subcategory with articles")
+    
+    result = db.wiki_subcategories.delete_one({"id": subcategory_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Subcategory not found")
+    
+    return {"message": "Subcategory deleted successfully"}
+
+# Wiki Article routes
+@app.post("/api/wiki/articles", response_model=ArticleResponse)
+async def create_article(
+    article_data: ArticleCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_WRITE)
+    
+    # Verify subcategory exists
+    subcategory = db.wiki_subcategories.find_one({"id": article_data.subcategory_id})
+    if not subcategory:
+        raise HTTPException(status_code=404, detail="Subcategory not found")
+    
+    article_id = str(uuid.uuid4())
+    article_doc = {
+        "id": article_id,
+        "title": article_data.title,
+        "content": article_data.content,
+        "subcategory_id": article_data.subcategory_id,
+        "visibility": article_data.visibility,
+        "tags": article_data.tags or [],
+        "images": article_data.images or [],
+        "version": 1,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "created_by": current_user["id"],
+        "updated_by": current_user["id"]
+    }
+    
+    db.wiki_articles.insert_one(article_doc)
+    
+    # Create initial version entry
+    version_doc = {
+        "article_id": article_id,
+        "version": 1,
+        "title": article_data.title,
+        "content": article_data.content,
+        "tags": article_data.tags or [],
+        "images": article_data.images or [],
+        "updated_at": datetime.utcnow(),
+        "updated_by": current_user["id"],
+        "change_notes": "Initial creation"
+    }
+    db.wiki_article_versions.insert_one(version_doc)
+    
+    return ArticleResponse(**article_doc)
+
+@app.get("/api/wiki/articles", response_model=List[ArticleResponse])
+async def get_articles(
+    subcategory_id: Optional[str] = None,
+    search: Optional[str] = None,
+    tags: Optional[str] = None,
+    visibility: Optional[ArticleVisibility] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_READ)
+    
+    query = {}
+    
+    # Filter by subcategory
+    if subcategory_id:
+        query["subcategory_id"] = subcategory_id
+    
+    # Filter by visibility (public articles are visible to all)
+    if visibility:
+        query["visibility"] = visibility
+    else:
+        # Show articles based on user role and visibility rules
+        user_role = UserRole(current_user["role"])
+        if user_role == UserRole.VIEWER:
+            query["visibility"] = {"$in": [ArticleVisibility.PUBLIC, ArticleVisibility.INTERNAL]}
+        # Admin and managers can see all articles
+        elif user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            query["visibility"] = {"$ne": ArticleVisibility.PRIVATE}
+    
+    # Search functionality
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"content": {"$regex": search, "$options": "i"}},
+            {"tags": {"$regex": search, "$options": "i"}}
+        ]
+    
+    # Filter by tags
+    if tags:
+        tag_list = [tag.strip() for tag in tags.split(",")]
+        query["tags"] = {"$in": tag_list}
+    
+    articles = list(db.wiki_articles.find(query, {"_id": 0}))
+    return [ArticleResponse(**article) for article in articles]
+
+@app.get("/api/wiki/articles/{article_id}", response_model=ArticleResponse)
+async def get_article(
+    article_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_READ)
+    
+    article = db.wiki_articles.find_one({"id": article_id}, {"_id": 0})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    # Check visibility permissions
+    user_role = UserRole(current_user["role"])
+    article_visibility = ArticleVisibility(article["visibility"])
+    
+    if article_visibility == ArticleVisibility.PRIVATE:
+        if article["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise HTTPException(status_code=403, detail="Access denied to private article")
+    
+    return ArticleResponse(**article)
+
+@app.put("/api/wiki/articles/{article_id}", response_model=ArticleResponse)
+async def update_article(
+    article_id: str,
+    article_data: ArticleUpdate,
+    change_notes: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_WRITE)
+    
+    article = db.wiki_articles.find_one({"id": article_id})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    # Check if user can edit this article
+    user_role = UserRole(current_user["role"])
+    if article["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="You can only edit your own articles")
+    
+    # Prepare update data
+    update_data = {"updated_at": datetime.utcnow(), "updated_by": current_user["id"]}
+    
+    if article_data.title is not None:
+        update_data["title"] = article_data.title
+    if article_data.content is not None:
+        update_data["content"] = article_data.content
+    if article_data.visibility is not None:
+        update_data["visibility"] = article_data.visibility
+    if article_data.tags is not None:
+        update_data["tags"] = article_data.tags
+    if article_data.images is not None:
+        update_data["images"] = article_data.images
+    
+    # Increment version
+    new_version = article["version"] + 1
+    update_data["version"] = new_version
+    
+    # Update article
+    db.wiki_articles.update_one({"id": article_id}, {"$set": update_data})
+    
+    # Create version entry
+    version_doc = {
+        "article_id": article_id,
+        "version": new_version,
+        "title": article_data.title or article["title"],
+        "content": article_data.content or article["content"],
+        "tags": article_data.tags or article["tags"],
+        "images": article_data.images or article["images"],
+        "updated_at": datetime.utcnow(),
+        "updated_by": current_user["id"],
+        "change_notes": change_notes or f"Updated by {current_user['full_name']}"
+    }
+    db.wiki_article_versions.insert_one(version_doc)
+    
+    # Get updated article
+    updated_article = db.wiki_articles.find_one({"id": article_id}, {"_id": 0})
+    return ArticleResponse(**updated_article)
+
+@app.delete("/api/wiki/articles/{article_id}")
+async def delete_article(
+    article_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_DELETE)
+    
+    article = db.wiki_articles.find_one({"id": article_id})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    # Check if user can delete this article
+    user_role = UserRole(current_user["role"])
+    if article["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="You can only delete your own articles")
+    
+    # Delete article and its versions
+    db.wiki_articles.delete_one({"id": article_id})
+    db.wiki_article_versions.delete_many({"article_id": article_id})
+    
+    return {"message": "Article deleted successfully"}
+
+@app.get("/api/wiki/articles/{article_id}/versions", response_model=List[ArticleVersion])
+async def get_article_versions(
+    article_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_READ)
+    
+    # Verify article exists and user has access
+    article = db.wiki_articles.find_one({"id": article_id})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    versions = list(db.wiki_article_versions.find(
+        {"article_id": article_id}, 
+        {"_id": 0}
+    ).sort("version", -1))
+    
+    return [ArticleVersion(**version) for version in versions]
+
+# Wiki search route
+@app.get("/api/wiki/search")
+async def search_wiki(
+    q: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.WIKI_READ)
+    
+    if len(q.strip()) < 2:
+        return {"articles": [], "categories": [], "subcategories": []}
+    
+    search_regex = {"$regex": q, "$options": "i"}
+    
+    # Search articles
+    article_query = {
+        "$or": [
+            {"title": search_regex},
+            {"content": search_regex},
+            {"tags": search_regex}
+        ]
+    }
+    
+    # Apply visibility filters
+    user_role = UserRole(current_user["role"])
+    if user_role == UserRole.VIEWER:
+        article_query["visibility"] = {"$in": [ArticleVisibility.PUBLIC, ArticleVisibility.INTERNAL]}
+    elif user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        article_query["visibility"] = {"$ne": ArticleVisibility.PRIVATE}
+    
+    articles = list(db.wiki_articles.find(article_query, {"_id": 0}).limit(10))
+    
+    # Search categories
+    categories = list(db.wiki_categories.find(
+        {"$or": [{"name": search_regex}, {"description": search_regex}]},
+        {"_id": 0}
+    ).limit(5))
+    
+    # Search subcategories
+    subcategories = list(db.wiki_subcategories.find(
+        {"$or": [{"name": search_regex}, {"description": search_regex}]},
+        {"_id": 0}
+    ).limit(5))
+    
+    return {
+        "articles": [ArticleResponse(**article) for article in articles],
+        "categories": [CategoryResponse(**cat) for cat in categories],
+        "subcategories": [SubcategoryResponse(**subcat) for subcat in subcategories]
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
