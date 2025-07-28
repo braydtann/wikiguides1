@@ -27,6 +27,9 @@ const WikiBrowser = () => {
     setSelectedSubcategory,
     fetchSubcategories,
     fetchArticles,
+    deleteCategory,
+    deleteSubcategory,
+    deleteArticle,
     loading
   } = useWiki();
   
