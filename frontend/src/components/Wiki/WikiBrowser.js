@@ -37,6 +37,9 @@ const WikiBrowser = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createType, setCreateType] = useState(''); // 'category', 'subcategory', 'article'
+  const [editingItem, setEditingItem] = useState(null);
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [viewingArticle, setViewingArticle] = useState(null);
 
   useEffect(() => {
     if (selectedCategory) {
