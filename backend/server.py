@@ -831,6 +831,460 @@ async def search_wiki(
         "subcategories": [SubcategoryResponse(**subcat) for subcat in subcategories]
     }
 
+# Flow management routes
+@app.post("/api/flows", response_model=FlowResponse)
+async def create_flow(
+    flow_data: FlowCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_WRITE)
+    
+    flow_id = str(uuid.uuid4())
+    flow_doc = {
+        "id": flow_id,
+        "title": flow_data.title,
+        "description": flow_data.description,
+        "visibility": flow_data.visibility,
+        "tags": flow_data.tags or [],
+        "version": 1,
+        "is_active": True,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+        "created_by": current_user["id"],
+        "updated_by": current_user["id"]
+    }
+    
+    db.flows.insert_one(flow_doc)
+    return FlowResponse(**flow_doc)
+
+@app.get("/api/flows", response_model=List[FlowResponse])
+async def get_flows(
+    search: Optional[str] = None,
+    tags: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_READ)
+    
+    query = {"is_active": True}
+    
+    # Apply visibility filters based on user role
+    user_role = UserRole(current_user["role"])
+    if user_role == UserRole.VIEWER:
+        query["visibility"] = {"$in": [ArticleVisibility.PUBLIC, ArticleVisibility.INTERNAL]}
+    elif user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        query["visibility"] = {"$ne": ArticleVisibility.PRIVATE}
+    
+    # Search functionality
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"description": {"$regex": search, "$options": "i"}},
+            {"tags": {"$regex": search, "$options": "i"}}
+        ]
+    
+    # Filter by tags
+    if tags:
+        tag_list = [tag.strip() for tag in tags.split(",")]
+        query["tags"] = {"$in": tag_list}
+    
+    flows = list(db.flows.find(query, {"_id": 0}).sort("created_at", -1))
+    return [FlowResponse(**flow) for flow in flows]
+
+@app.get("/api/flows/{flow_id}", response_model=FlowResponse)
+async def get_flow(
+    flow_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_READ)
+    
+    flow = db.flows.find_one({"id": flow_id}, {"_id": 0})
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    # Check visibility permissions
+    user_role = UserRole(current_user["role"])
+    flow_visibility = ArticleVisibility(flow["visibility"])
+    
+    if flow_visibility == ArticleVisibility.PRIVATE:
+        if flow["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            raise HTTPException(status_code=403, detail="Access denied to private flow")
+    
+    return FlowResponse(**flow)
+
+@app.put("/api/flows/{flow_id}", response_model=FlowResponse)
+async def update_flow(
+    flow_id: str,
+    flow_data: FlowCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_WRITE)
+    
+    flow = db.flows.find_one({"id": flow_id})
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    # Check if user can edit this flow
+    user_role = UserRole(current_user["role"])
+    if flow["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="You can only edit your own flows")
+    
+    update_data = {
+        "title": flow_data.title,
+        "description": flow_data.description,
+        "visibility": flow_data.visibility,
+        "tags": flow_data.tags or [],
+        "version": flow["version"] + 1,
+        "updated_at": datetime.utcnow(),
+        "updated_by": current_user["id"]
+    }
+    
+    db.flows.update_one({"id": flow_id}, {"$set": update_data})
+    
+    updated_flow = db.flows.find_one({"id": flow_id}, {"_id": 0})
+    return FlowResponse(**updated_flow)
+
+@app.delete("/api/flows/{flow_id}")
+async def delete_flow(
+    flow_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_DELETE)
+    
+    flow = db.flows.find_one({"id": flow_id})
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    # Check if user can delete this flow
+    user_role = UserRole(current_user["role"])
+    if flow["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="You can only delete your own flows")
+    
+    # Soft delete - set is_active to False
+    db.flows.update_one({"id": flow_id}, {"$set": {"is_active": False, "updated_at": datetime.utcnow()}})
+    
+    return {"message": "Flow deleted successfully"}
+
+# Flow steps management
+@app.post("/api/flows/{flow_id}/steps", response_model=FlowStepResponse)
+async def create_flow_step(
+    flow_id: str,
+    step_data: FlowStepCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_WRITE)
+    
+    # Verify flow exists and user has access
+    flow = db.flows.find_one({"id": flow_id})
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    user_role = UserRole(current_user["role"])
+    if flow["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="You can only edit your own flows")
+    
+    step_id = str(uuid.uuid4())
+    step_doc = {
+        "id": step_id,
+        "flow_id": flow_id,
+        "step_order": step_data.step_order,
+        "step_type": step_data.step_type,
+        "question_text": step_data.question_text,
+        "description": step_data.description,
+        "options": step_data.options or [],
+        "validation_rules": step_data.validation_rules or {},
+        "conditional_logic": step_data.conditional_logic or {},
+        "subflow_id": step_data.subflow_id,
+        "images": step_data.images or [],
+        "is_required": step_data.is_required,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    }
+    
+    db.flow_steps.insert_one(step_doc)
+    return FlowStepResponse(**step_doc)
+
+@app.get("/api/flows/{flow_id}/steps", response_model=List[FlowStepResponse])
+async def get_flow_steps(
+    flow_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_READ)
+    
+    # Verify flow exists and user has access
+    flow = db.flows.find_one({"id": flow_id})
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    steps = list(db.flow_steps.find({"flow_id": flow_id}, {"_id": 0}).sort("step_order", 1))
+    return [FlowStepResponse(**step) for step in steps]
+
+@app.put("/api/flows/{flow_id}/steps/{step_id}", response_model=FlowStepResponse)
+async def update_flow_step(
+    flow_id: str,
+    step_id: str,
+    step_data: FlowStepCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_WRITE)
+    
+    # Verify flow exists and user has access
+    flow = db.flows.find_one({"id": flow_id})
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    user_role = UserRole(current_user["role"])
+    if flow["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="You can only edit your own flows")
+    
+    update_data = {
+        "step_order": step_data.step_order,
+        "step_type": step_data.step_type,
+        "question_text": step_data.question_text,
+        "description": step_data.description,
+        "options": step_data.options or [],
+        "validation_rules": step_data.validation_rules or {},  
+        "conditional_logic": step_data.conditional_logic or {},
+        "subflow_id": step_data.subflow_id,
+        "images": step_data.images or [],
+        "is_required": step_data.is_required,
+        "updated_at": datetime.utcnow()
+    }
+    
+    result = db.flow_steps.update_one({"id": step_id, "flow_id": flow_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Flow step not found")
+    
+    updated_step = db.flow_steps.find_one({"id": step_id}, {"_id": 0})
+    return FlowStepResponse(**updated_step)
+
+@app.delete("/api/flows/{flow_id}/steps/{step_id}")
+async def delete_flow_step(
+    flow_id: str,
+    step_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_WRITE)
+    
+    # Verify flow exists and user has access
+    flow = db.flows.find_one({"id": flow_id})
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    user_role = UserRole(current_user["role"])
+    if flow["created_by"] != current_user["id"] and user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+        raise HTTPException(status_code=403, detail="You can only edit your own flows")
+    
+    result = db.flow_steps.delete_one({"id": step_id, "flow_id": flow_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Flow step not found")
+    
+    return {"message": "Flow step deleted successfully"}
+
+# Flow execution routes
+@app.post("/api/flows/{flow_id}/execute", response_model=FlowExecutionResponse)
+async def start_flow_execution(
+    flow_id: str,
+    execution_data: FlowExecutionCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_EXECUTE)
+    
+    # Verify flow exists and user has access
+    flow = db.flows.find_one({"id": flow_id})
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    # Get first step
+    first_step = db.flow_steps.find_one({"flow_id": flow_id}, {"_id": 0}, sort=[("step_order", 1)])
+    
+    execution_id = str(uuid.uuid4())
+    session_id = str(uuid.uuid4())
+    
+    execution_doc = {
+        "id": execution_id,
+        "flow_id": flow_id,
+        "user_id": current_user["id"] if current_user else None,
+        "session_id": session_id,
+        "status": FlowExecutionStatus.IN_PROGRESS,
+        "current_step_id": first_step["id"] if first_step else None,
+        "answers": {},
+        "session_data": execution_data.session_data or {},
+        "url_path": f"/flows/{flow_id}/execute/{session_id}",
+        "started_at": datetime.utcnow(),
+        "completed_at": None,
+        "last_activity": datetime.utcnow()
+    }
+    
+    db.flow_executions.insert_one(execution_doc)
+    return FlowExecutionResponse(**execution_doc)
+
+@app.get("/api/flows/{flow_id}/execute/{session_id}", response_model=FlowExecutionResponse)
+async def get_flow_execution(
+    flow_id: str,
+    session_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_EXECUTE)
+    
+    execution = db.flow_executions.find_one({"flow_id": flow_id, "session_id": session_id}, {"_id": 0})
+    if not execution:
+        raise HTTPException(status_code=404, detail="Flow execution not found")
+    
+    return FlowExecutionResponse(**execution)
+
+@app.post("/api/flows/{flow_id}/execute/{session_id}/answer")
+async def submit_step_answer(
+    flow_id: str,
+    session_id: str,
+    answer_data: FlowStepAnswer,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_EXECUTE)
+    
+    execution = db.flow_executions.find_one({"flow_id": flow_id, "session_id": session_id})
+    if not execution:
+        raise HTTPException(status_code=404, detail="Flow execution not found")
+    
+    if execution["status"] != FlowExecutionStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail="Flow execution is not in progress")
+    
+    # Get current step
+    current_step = db.flow_steps.find_one({"id": answer_data.step_id, "flow_id": flow_id})
+    if not current_step:
+        raise HTTPException(status_code=404, detail="Flow step not found")
+    
+    # Store the answer
+    answers = execution["answers"]
+    answers[answer_data.step_id] = {
+        "answer": answer_data.answer,
+        "metadata": answer_data.metadata or {},
+        "answered_at": datetime.utcnow().isoformat()
+    }
+    
+    # Determine next step
+    next_step_id = None
+    if current_step["step_type"] == FlowStepType.MULTIPLE_CHOICE:
+        # Find next step based on selected option
+        for option in current_step["options"]:
+            if option.get("value") == answer_data.answer:
+                next_step_id = option.get("next_step")
+                break
+        
+        # If no specific next step, get next step by order
+        if not next_step_id:
+            next_step = db.flow_steps.find_one(
+                {"flow_id": flow_id, "step_order": {"$gt": current_step["step_order"]}},
+                sort=[("step_order", 1)]
+            )
+            next_step_id = next_step["id"] if next_step else None
+    
+    elif current_step["step_type"] == FlowStepType.CONDITIONAL_BRANCH:
+        # Evaluate conditional logic
+        conditional_logic = current_step.get("conditional_logic", {})
+        # For now, simple implementation - can be extended
+        conditions = conditional_logic.get("conditions", [])
+        for condition in conditions:
+            if condition.get("field") == "answer" and condition.get("operator") == "equals":
+                if answer_data.answer == condition.get("value"):
+                    next_step_id = condition.get("next_step")
+                    break
+        
+        # Default next step
+        if not next_step_id:
+            next_step_id = conditional_logic.get("default_next_step")
+    
+    else:
+        # For text input and other types, get next step by order
+        next_step = db.flow_steps.find_one(
+            {"flow_id": flow_id, "step_order": {"$gt": current_step["step_order"]}},
+            sort=[("step_order", 1)]
+        )
+        next_step_id = next_step["id"] if next_step else None
+    
+    # Update execution
+    update_data = {
+        "answers": answers,
+        "current_step_id": next_step_id,
+        "last_activity": datetime.utcnow()
+    }
+    
+    # Mark as completed if no more steps
+    if not next_step_id:
+        update_data["status"] = FlowExecutionStatus.COMPLETED
+        update_data["completed_at"] = datetime.utcnow()
+    
+    db.flow_executions.update_one(
+        {"flow_id": flow_id, "session_id": session_id},
+        {"$set": update_data}
+    )
+    
+    return {
+        "message": "Answer submitted successfully",
+        "next_step_id": next_step_id,
+        "is_completed": not next_step_id
+    }
+
+@app.get("/api/flows/{flow_id}/execute/{session_id}/summary", response_model=FlowSummary)
+async def get_flow_summary(
+    flow_id: str,
+    session_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    check_permission(current_user, AppPermission.FLOW_EXECUTE)
+    
+    execution = db.flow_executions.find_one({"flow_id": flow_id, "session_id": session_id})
+    if not execution:
+        raise HTTPException(status_code=404, detail="Flow execution not found")
+    
+    flow = db.flows.find_one({"id": flow_id})
+    steps = list(db.flow_steps.find({"flow_id": flow_id}, {"_id": 0}).sort("step_order", 1))
+    
+    # Build completed steps summary
+    completed_steps = []
+    for step in steps:
+        if step["id"] in execution["answers"]:
+            answer_data = execution["answers"][step["id"]]
+            completed_steps.append({
+                "step_order": step["step_order"],
+                "question": step["question_text"],
+                "answer": answer_data["answer"],
+                "answered_at": answer_data["answered_at"]
+            })
+    
+    # Calculate total time
+    started_at = execution["started_at"]
+    completed_at = execution.get("completed_at", datetime.utcnow())
+    total_time = int((completed_at - started_at).total_seconds())
+    
+    # Generate summaries
+    summary_text = f"Flow '{flow['title']}' completed with {len(completed_steps)} steps answered."
+    
+    summary_markdown = f"# Flow Summary: {flow['title']}\n\n"
+    for step in completed_steps:
+        summary_markdown += f"**Q{step['step_order']}.** {step['question']}\n"
+        summary_markdown += f"**Answer:** {step['answer']}\n\n"
+    
+    summary_json = {
+        "flow_id": flow_id,
+        "flow_title": flow["title"],
+        "execution_id": execution["id"],
+        "completed_steps": completed_steps,
+        "total_time_seconds": total_time,
+        "started_at": started_at.isoformat() if isinstance(started_at, datetime) else started_at,
+        "completed_at": completed_at.isoformat() if isinstance(completed_at, datetime) else completed_at
+    }
+    
+    return FlowSummary(
+        execution_id=execution["id"],
+        flow_title=flow["title"],
+        completed_steps=completed_steps,
+        total_time_seconds=total_time,
+        summary_text=summary_text,
+        summary_markdown=summary_markdown,
+        summary_json=summary_json,
+        generated_at=datetime.utcnow()
+    )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
