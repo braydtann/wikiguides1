@@ -161,7 +161,7 @@ class BackendTester:
                 expected_fields = ["id", "email", "full_name", "role", "is_active"]
                 
                 if all(field in data for field in expected_fields):
-                    if (data["email"] == "admin@test.com" and 
+                    if (data["email"] == "admin@wikiguides.com" and 
                         data["role"] == "admin" and
                         data["is_active"] == True):
                         self.log_test("Get Current User", True, "Current user info retrieved successfully", data)
