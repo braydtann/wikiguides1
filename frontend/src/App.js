@@ -39,20 +39,23 @@ const AppContent = () => {
   return (
     <WikiProvider>
       <FlowProvider>
-        <div className="min-h-screen bg-secondary-50">
-          <Navigation />
-          <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/wiki" element={<WikiBrowser />} />
-              <Route path="/wiki/*" element={<WikiBrowser />} />
-              <Route path="/flows" element={<FlowBrowser />} />
-              <Route path="/flows/:flowId/execute" element={<FlowExecutor />} />
-              <Route path="/flows/:flowId/execute/:sessionId" element={<FlowExecutor />} />
-            </Routes>
-          </main>
-        </div>
+        <AdminProvider>
+          <div className="min-h-screen bg-secondary-50">
+            <Navigation />
+            <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/wiki" element={<WikiBrowser />} />
+                <Route path="/wiki/*" element={<WikiBrowser />} />
+                <Route path="/flows" element={<FlowBrowser />} />
+                <Route path="/flows/:flowId/execute" element={<FlowExecutor />} />
+                <Route path="/flows/:flowId/execute/:sessionId" element={<FlowExecutor />} />
+                <Route path="/admin" element={<AdminDashboard />} />
+              </Routes>
+            </main>
+          </div>
+        </AdminProvider>
       </FlowProvider>
     </WikiProvider>
   );
