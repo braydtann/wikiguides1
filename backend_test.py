@@ -106,7 +106,7 @@ class BackendTester:
         """Test POST /api/auth/login endpoint"""
         try:
             login_data = {
-                "email": "admin@test.com",
+                "email": "admin@wikiguides.com",
                 "password": "admin123"
             }
             
