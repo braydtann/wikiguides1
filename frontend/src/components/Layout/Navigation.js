@@ -17,6 +17,7 @@ import {
 const Navigation = () => {
   const { user, logout, hasPermission } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   const navigationItems = [
     {
@@ -54,6 +55,11 @@ const Navigation = () => {
   const filteredNavigationItems = navigationItems.filter(item => 
     !item.permission || hasPermission(item.permission)
   );
+
+  const isCurrentPath = (href) => {
+    if (href === '/dashboard' && location.pathname === '/') return true;
+    return location.pathname.startsWith(href);
+  };
 
   return (
     <nav className="bg-white shadow-sm border-b border-secondary-200">
