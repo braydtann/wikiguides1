@@ -352,6 +352,7 @@ export const FlowProvider = ({ children }) => {
 
     // Flow functions
     fetchFlows,
+    getFlow,
     createFlow,
     updateFlow,
     deleteFlow,
