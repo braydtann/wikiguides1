@@ -519,9 +519,9 @@ const AdminDashboard = () => {
                   </div>
                   <input 
                     type="checkbox" 
-                    checked={systemSettings?.email_notifications || false}
+                    checked={editingSettings?.email_notifications || false}
+                    onChange={(e) => handleSettingsChange('email_notifications', e.target.checked)}
                     className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-secondary-300 rounded"
-                    onChange={(e) => {/* Handle change */}}
                   />
                 </div>
                 
