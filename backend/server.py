@@ -66,6 +66,18 @@ class ArticleVisibility(str, Enum):
     DEPARTMENT = "department"
     PRIVATE = "private"
 
+class FlowStepType(str, Enum):
+    MULTIPLE_CHOICE = "multiple_choice"
+    TEXT_INPUT = "text_input"  
+    CONDITIONAL_BRANCH = "conditional_branch"
+    SUBFLOW = "subflow"
+    INFORMATION = "information"
+
+class FlowExecutionStatus(str, Enum):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    ABANDONED = "abandoned"
+
 # Pydantic models
 class UserCreate(BaseModel):
     email: EmailStr
