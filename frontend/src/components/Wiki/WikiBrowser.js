@@ -261,7 +261,7 @@ const WikiBrowser = () => {
                         >
                           <IconComponent className="h-4 w-4" />
                         </div>
-                        <div className="text-left flex-1">
+                      <div className="text-left flex-1">
                           <div className="font-medium text-sm">{category.name}</div>
                           {category.description && (
                             <div className="text-xs text-secondary-500 truncate">
@@ -269,6 +269,34 @@ const WikiBrowser = () => {
                             </div>
                           )}
                         </div>
+                        {hasPermission('wiki:write') && (
+                          <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingItem({ type: 'category', data: category });
+                                setCreateType('category');
+                                setShowCreateModal(true);
+                              }}
+                              className="p-1 hover:bg-secondary-100 rounded"
+                              title="Edit Category"
+                            >
+                              <Edit className="h-3 w-3" />
+                            </button>
+                            {hasPermission('wiki:delete') && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteCategory(category.id, category.name);
+                                }}
+                                className="p-1 hover:bg-red-100 rounded text-red-600"
+                                title="Delete Category"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                         <ChevronRight className={`h-4 w-4 transition-transform ${
                           isSelected ? 'rotate-90' : ''
                         }`} />
