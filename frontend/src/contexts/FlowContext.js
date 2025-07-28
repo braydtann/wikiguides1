@@ -335,6 +335,19 @@ export const FlowProvider = ({ children }) => {
     }
   };
 
+  // Additional functions that components expect
+  const getFlowExecution = async (flowId, sessionId) => {
+    return await getFlowSession(sessionId);
+  };
+
+  const submitStepAnswer = async (flowId, sessionId, stepId, answer) => {
+    return await submitStepResponse(sessionId, stepId, answer);
+  };
+
+  const getFlowSummary = async (flowId, sessionId, format = 'text') => {
+    return await generateFlowSummary(sessionId, format);
+  };
+
   // Auto-fetch flows on mount
   useEffect(() => {
     if (token) {
