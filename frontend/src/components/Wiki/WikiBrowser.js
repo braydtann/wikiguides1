@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useWiki } from '../../contexts/WikiContext';
 import { useAuth } from '../../contexts/AuthContext';
+import CreateCategoryModal from './CreateCategoryModal';
+import CreateSubcategoryModal from './CreateSubcategoryModal';
+import CreateArticleModal from './CreateArticleModal';
 import { 
   BookOpen, 
   Plus, 
