@@ -78,15 +78,20 @@ const Navigation = () => {
             <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
               {filteredNavigationItems.map((item) => {
                 const Icon = item.icon;
+                const isActive = isCurrentPath(item.href);
                 return (
-                  <a
+                  <Link
                     key={item.name}
-                    href={item.href}
-                    className="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-secondary-500 hover:text-secondary-700 hover:border-secondary-300 transition-colors"
+                    to={item.href}
+                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'border-primary-500 text-secondary-900'
+                        : 'border-transparent text-secondary-500 hover:text-secondary-700 hover:border-secondary-300'
+                    }`}
                   >
                     <Icon className="h-4 w-4 mr-2" />
                     {item.name}
-                  </a>
+                  </Link>
                 );
               })}
             </div>
