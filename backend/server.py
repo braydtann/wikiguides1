@@ -60,6 +60,12 @@ class AppPermission(str, Enum):
     USER_MANAGE = "user:manage"
     ADMIN_ACCESS = "admin:access"
 
+class ArticleVisibility(str, Enum):
+    PUBLIC = "public"
+    INTERNAL = "internal"
+    DEPARTMENT = "department"
+    PRIVATE = "private"
+
 # Pydantic models
 class UserCreate(BaseModel):
     email: EmailStr
