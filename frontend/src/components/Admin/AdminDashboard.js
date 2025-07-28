@@ -463,8 +463,8 @@ const AdminDashboard = () => {
                   </label>
                   <select 
                     className="input-field"
-                    value={systemSettings?.storage_provider || ''}
-                    onChange={(e) => {/* Handle change */}}
+                    value={editingSettings?.storage_provider || ''}
+                    onChange={(e) => handleSettingsChange('storage_provider', e.target.value)}
                   >
                     <option value="">Local Storage</option>
                     <option value="google_drive">Google Drive</option>
