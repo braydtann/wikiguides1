@@ -2128,6 +2128,16 @@ class BackendTester:
             except Exception as e:
                 self.log_test(test_name, False, f"Test failed with unexpected error: {str(e)}")
         
+        print(f"\n🔧 Running {len(admin_tests)} Admin and Analytics Tests...")
+        print("-" * 40)
+        
+        for test_name, test_func in admin_tests:
+            try:
+                if test_func():
+                    passed += 1
+            except Exception as e:
+                self.log_test(test_name, False, f"Test failed with unexpected error: {str(e)}")
+        
         print("\n" + "=" * 60)
         print(f"📊 Test Results: {passed}/{total} tests passed")
         
