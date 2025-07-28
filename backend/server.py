@@ -979,7 +979,7 @@ async def delete_subcategory(
     
     return {"message": "Subcategory and all nested content deleted successfully"}
 
-# Wiki Article routes
+# Enhanced Wiki Article routes
 @app.post("/api/wiki/articles", response_model=ArticleResponse)
 async def create_article(
     article_data: ArticleCreate,
@@ -987,10 +987,23 @@ async def create_article(
 ):
     check_permission(current_user, AppPermission.WIKI_WRITE)
     
-    # Verify subcategory exists
+    # Verify subcategory exists and get category/wiki info
     subcategory = db.wiki_subcategories.find_one({"id": article_data.subcategory_id})
     if not subcategory:
         raise HTTPException(status_code=404, detail="Subcategory not found")
+    
+    category = db.wiki_categories.find_one({"id": subcategory["category_id"]})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Verify wiki access
+    wiki = db.wikis.find_one({"id": category["wiki_id"]})
+    if wiki:
+        user_role = UserRole(current_user["role"])
+        if (not wiki["is_public"] and 
+            user_role.value not in wiki["allowed_roles"] and 
+            user_role not in [UserRole.ADMIN]):
+            raise HTTPException(status_code=403, detail="Access denied to this wiki")
     
     article_id = str(uuid.uuid4())
     article_doc = {
@@ -998,6 +1011,7 @@ async def create_article(
         "title": article_data.title,
         "content": article_data.content,
         "subcategory_id": article_data.subcategory_id,
+        "wiki_id": category["wiki_id"],  # Derived from category
         "visibility": article_data.visibility,
         "tags": article_data.tags or [],
         "images": article_data.images or [],
@@ -1010,17 +1024,17 @@ async def create_article(
     
     db.wiki_articles.insert_one(article_doc)
     
-    # Create initial version entry
+    # Store version history
     version_doc = {
         "article_id": article_id,
         "version": 1,
         "title": article_data.title,
         "content": article_data.content,
+        "visibility": article_data.visibility,
         "tags": article_data.tags or [],
         "images": article_data.images or [],
-        "updated_at": datetime.utcnow(),
-        "updated_by": current_user["id"],
-        "change_notes": "Initial creation"
+        "created_at": datetime.utcnow(),
+        "created_by": current_user["id"]
     }
     db.wiki_article_versions.insert_one(version_doc)
     
@@ -1028,46 +1042,114 @@ async def create_article(
 
 @app.get("/api/wiki/articles", response_model=List[ArticleResponse])
 async def get_articles(
+    wiki_id: Optional[str] = None,
     subcategory_id: Optional[str] = None,
-    search: Optional[str] = None,
+    category_id: Optional[str] = None,
+    search_query: Optional[str] = None,
+    visibility: Optional[str] = None,
     tags: Optional[str] = None,
-    visibility: Optional[ArticleVisibility] = None,
     current_user: dict = Depends(get_current_user)
 ):
     check_permission(current_user, AppPermission.WIKI_READ)
     
     query = {}
     
-    # Filter by subcategory
+    # Build query based on filters
+    if wiki_id:
+        # Verify access to specific wiki
+        wiki = db.wikis.find_one({"id": wiki_id})
+        if not wiki:
+            raise HTTPException(status_code=404, detail="Wiki not found")
+            
+        user_role = UserRole(current_user["role"])
+        if (not wiki["is_public"] and 
+            user_role.value not in wiki["allowed_roles"] and 
+            user_role not in [UserRole.ADMIN]):
+            raise HTTPException(status_code=403, detail="Access denied to this wiki")
+        
+        query["wiki_id"] = wiki_id
+    
     if subcategory_id:
+        # Verify subcategory exists and wiki access
+        subcategory = db.wiki_subcategories.find_one({"id": subcategory_id})
+        if subcategory:
+            category = db.wiki_categories.find_one({"id": subcategory["category_id"]})
+            if category:
+                wiki = db.wikis.find_one({"id": category["wiki_id"]})
+                if wiki:
+                    user_role = UserRole(current_user["role"])
+                    if (not wiki["is_public"] and 
+                        user_role.value not in wiki["allowed_roles"] and 
+                        user_role not in [UserRole.ADMIN]):
+                        raise HTTPException(status_code=403, detail="Access denied to this wiki")
+        
         query["subcategory_id"] = subcategory_id
     
-    # Filter by visibility (public articles are visible to all)
-    if visibility:
-        query["visibility"] = visibility
+    if category_id:
+        # Get all subcategories under this category
+        subcategories = list(db.wiki_subcategories.find({"category_id": category_id}, {"id": 1}))
+        subcategory_ids = [subcat["id"] for subcat in subcategories]
+        if subcategory_ids:
+            query["subcategory_id"] = {"$in": subcategory_ids}
+    
+    # Apply visibility filters based on user role
+    user_role = UserRole(current_user["role"])
+    visibility_conditions = []
+    
+    if user_role == UserRole.VIEWER:
+        visibility_conditions = [
+            ArticleVisibility.PUBLIC.value, 
+            ArticleVisibility.INTERNAL.value
+        ]
+    elif user_role in [UserRole.AGENT, UserRole.CONTRIBUTOR]:
+        visibility_conditions = [
+            ArticleVisibility.PUBLIC.value,
+            ArticleVisibility.INTERNAL.value,
+            ArticleVisibility.DEPARTMENT.value
+        ]
+    elif user_role in [UserRole.ADMIN, UserRole.MANAGER]:
+        # Admins and managers can see all articles
+        pass
     else:
-        # Show articles based on user role and visibility rules
-        user_role = UserRole(current_user["role"])
-        if user_role == UserRole.VIEWER:
-            query["visibility"] = {"$in": [ArticleVisibility.PUBLIC, ArticleVisibility.INTERNAL]}
-        # Admin and managers can see all articles
-        elif user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
-            query["visibility"] = {"$ne": ArticleVisibility.PRIVATE}
+        visibility_conditions = [ArticleVisibility.PUBLIC.value]
+    
+    if visibility_conditions:
+        if visibility and visibility in visibility_conditions:
+            query["visibility"] = visibility
+        else:
+            query["visibility"] = {"$in": visibility_conditions}
+    elif visibility:
+        query["visibility"] = visibility
     
     # Search functionality
-    if search:
+    if search_query and len(search_query.strip()) >= 2:
+        search_regex = {"$regex": search_query.strip(), "$options": "i"}
         query["$or"] = [
-            {"title": {"$regex": search, "$options": "i"}},
-            {"content": {"$regex": search, "$options": "i"}},
-            {"tags": {"$regex": search, "$options": "i"}}
+            {"title": search_regex},
+            {"content": search_regex},
+            {"tags": search_regex}
         ]
     
-    # Filter by tags
+    # Tag filtering
     if tags:
-        tag_list = [tag.strip() for tag in tags.split(",")]
-        query["tags"] = {"$in": tag_list}
+        tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
+        if tag_list:
+            query["tags"] = {"$in": tag_list}
     
-    articles = list(db.wiki_articles.find(query, {"_id": 0}))
+    # If no specific filters and user is not admin/manager, filter by accessible wikis
+    if not wiki_id and not subcategory_id and not category_id:
+        user_role = UserRole(current_user["role"])
+        if user_role not in [UserRole.ADMIN, UserRole.MANAGER]:
+            accessible_wikis = list(db.wikis.find({
+                "$or": [
+                    {"is_public": True},
+                    {"allowed_roles": {"$in": [user_role.value]}}
+                ]
+            }, {"id": 1}))
+            wiki_ids = [wiki["id"] for wiki in accessible_wikis]
+            query["wiki_id"] = {"$in": wiki_ids}
+    
+    articles = list(db.wiki_articles.find(query, {"_id": 0}).sort("updated_at", -1))
     return [ArticleResponse(**article) for article in articles]
 
 @app.get("/api/wiki/articles/{article_id}", response_model=ArticleResponse)
