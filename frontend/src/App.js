@@ -10,9 +10,12 @@ import LoginForm from './components/Auth/LoginForm';
 import RegisterForm from './components/Auth/RegisterForm';
 import Dashboard from './components/Dashboard/Dashboard';
 import EnhancedWikiBrowser from './components/Wiki/EnhancedWikiBrowser';
+import PublicWikiView from './components/Wiki/PublicWikiView';
+import WikiCustomizer from './components/Wiki/WikiCustomizer';
 import FlowBrowser from './components/Flow/FlowBrowser';
 import FlowExecutor from './components/Flow/FlowExecutor';
 import AdminDashboard from './components/Admin/AdminDashboard';
+import HelpjuiceAdminDashboard from './components/Admin/HelpjuiceAdminDashboard';
 import LoadingSpinner from './components/Common/LoadingSpinner';
 
 // Main App component that handles routing and authentication
@@ -48,10 +51,13 @@ const AppContent = () => {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/wiki" element={<EnhancedWikiBrowser />} />
                 <Route path="/wiki/*" element={<EnhancedWikiBrowser />} />
+                <Route path="/wiki/public" element={<PublicWikiView />} />
+                <Route path="/wiki/customize" element={<WikiCustomizer />} />
                 <Route path="/flows" element={<FlowBrowser />} />
                 <Route path="/flows/:flowId/execute" element={<FlowExecutor />} />
                 <Route path="/flows/:flowId/execute/:sessionId" element={<FlowExecutor />} />
-                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin" element={<HelpjuiceAdminDashboard />} />
+                <Route path="/admin/classic" element={<AdminDashboard />} />
               </Routes>
             </main>
           </div>
